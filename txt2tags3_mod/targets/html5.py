@@ -1,0 +1,48 @@
+# txt2tags3_mod/targets/html5.py
+# Tags and rules for the "html5" target.
+# Auto-generated — edit carefully.
+
+TAGS = {
+    "title1Open": "<section~A~>\n<h1>\a</h1>",
+    "title1Close": "</section>",
+    "title2Open": "<section~A~>\n<h2>\a</h2>",
+    "title2Close": "</section>",
+    "title3Open": "<section~A~>\n<h3>\a</h3>",
+    "title3Close": "</section>",
+    "title4Open": "<section~A~>\n<h4>\a</h4>",
+    "title4Close": "</section>",
+    "title5Open": "<section~A~>\n<h5>\a</h5>",
+    "title5Close": "</section>",
+    "fontBoldOpen": "<strong>",
+    "fontBoldClose": "</strong>",
+    "fontItalicOpen": "<em>",
+    "fontItalicClose": "</em>",
+    "fontUnderlineOpen": '<span class="underline">',
+    "fontUnderlineClose": "</span>",
+    "fontStrikeOpen": "<del>",
+    "fontStrikeClose": "</del>",
+    "listItemClose": "</li>",
+    "numlistItemClose": "</li>",
+    "deflistItem2Close": "</dd>",
+    "bar1": '<hr class="light">',
+    "bar2": '<hr class="heavy">',
+    "img": '<img~a~ src="\a" alt="">',
+    "imgEmbed": '<img~a~ src="\a" alt="">',
+    "_imgAlignLeft": ' class="left"',
+    "_imgAlignCenter": ' class="center"',
+    "_imgAlignRight": ' class="right"',
+    "tableOpen": "<table~a~~b~>",
+    "_tableBorder": ' class="tableborder"',
+    "_tableAlignCenter": ' style="margin-left: auto; margin-right: auto;"',
+    "_tableCellAlignRight": ' class="right"',
+    "_tableCellAlignCenter": ' class="center"',
+    "cssOpen": "<style>",
+    "tocOpen": "<nav>",
+    "tocClose": "</nav>",
+    "EOD": "</article></body></html>",
+},
+
+RULES = {
+    # TIP html5 inherits all HTML state.rules
+    "titleblocks": 1,
+},
