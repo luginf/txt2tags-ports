@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>TXT2TAGS TEST INPUT</title>
+<meta name="generator" content="http://txt2tags.org">
+<style>
+body{background-color:#fff;color:#000;}
+hr{background-color:#000;border:0;color:#000;}
+hr.heavy{height:5px;}
+hr.light{height:1px;}
+img{border:0;display:block;}
+img.right{margin:0 0 0 auto;}
+img.center{border:0;margin:0 auto;}
+table th,table td{padding:4px;}
+.center,header{text-align:center;}
+table.center {margin-left:auto; margin-right:auto;}
+.right{text-align:right;}
+.left{text-align:left;}
+.tableborder,.tableborder td,.tableborder th{border:1px solid #000;}
+.underline{text-decoration:underline;}
+</style>
+</head>
+<body>
+<header>
+<hgroup>
+<h1>TXT2TAGS TEST INPUT</h1>
+<h2>Test Suite</h2>
+<h3>2026-01-01</h3>
+</hgroup>
+</header>
+<article>
+
+
+<section>
+<h1>Level 1 Title</h1>
+
+<section>
+<h2>Level 2 Title</h2>
+
+<section>
+<h3>Level 3 Title</h3>
+
+<section>
+<h4>Level 4 Title</h4>
+
+<section>
+<h5>Level 5 Title</h5>
+
+</section>
+</section>
+</section>
+</section>
+<section>
+<h2>Inline Markup</h2>
+
+<p>
+Normal text. <strong>Bold text</strong>. <em>Italic text</em>. <span class="underline">Underline text</span>.
+<del>Strikethrough</del>. <code>Monospaced text</code>.
+</p>
+<p>
+<strong>Bold and <em>italic</em> combined</strong>. <em>Italic and <span class="underline">underline</span> combined</em>.
+</p>
+<p>
+Escaped char: \<strong>not bold</strong>.
+</p>
+
+</section>
+<section>
+<h2>Paragraphs</h2>
+
+<p>
+First paragraph with some content.
+Still the first paragraph (line continuation).
+</p>
+<p>
+Second paragraph after blank line.
+</p>
+
+</section>
+<section>
+<h2>Horizontal Bars</h2>
+
+<hr class="light">
+
+<hr class="heavy">
+
+</section>
+<section>
+<h2>Lists</h2>
+
+<section>
+<h3>Unordered List</h3>
+
+<ul>
+<li>First item
+</li>
+<li>Second item
+  <ul>
+  <li>Nested item A
+  </li>
+  <li>Nested item B
+    <ul>
+    <li>Deeply nested
+    </li>
+    </ul>
+  </li>
+  </ul>
+</li>
+<li>Third item
+<p></p>
+=== Ordered List ===
+<p></p>
+</li>
+</ul>
+
+<ol>
+<li>First step
+</li>
+<li>Second step
+  <ol>
+  <li>Sub-step one
+  </li>
+  <li>Sub-step two
+  </li>
+  </ol>
+</li>
+<li>Third step
+<p></p>
+=== Definition List ===
+<p></p>
+</li>
+</ol>
+
+<dl>
+<dt>Term One</dt><dd>
+  Definition of term one.
+</dd>
+<dt>Term Two</dt><dd>
+  Definition of term two.
+</dd>
+<dt>Term Three</dt><dd>
+  A longer definition that spans
+  multiple source lines.
+</dd>
+</dl>
+
+</section>
+</section>
+<section>
+<h2>Links</h2>
+
+<p>
+A bare URL: <a href="http://txt2tags.org">http://txt2tags.org</a>
+</p>
+<p>
+A named link: <a href="http://txt2tags.org">TXT2TAGS</a>
+</p>
+<p>
+A local anchor link: <a href="#level-1-title">Introduction</a>
+</p>
+
+</section>
+<section>
+<h2>Images</h2>
+
+<p>
+<img class="center" src="portrait.png" alt="">
+</p>
+
+</section>
+<section>
+<h2>Verbatim Block</h2>
+
+<pre>
+  def hello(name):
+      print("Hello, " + name)
+  
+  hello("world")
+</pre>
+
+</section>
+<section>
+<h2>Raw Block</h2>
+
+&lt;b&gt;This is raw HTML — passed through as-is.&lt;/b&gt;
+
+</section>
+<section>
+<h2>Quote Block</h2>
+
+	<blockquote>
+	Single level quote.
+	Still inside the quote.
+	</blockquote>
+	<blockquote>
+		<blockquote>
+		Nested (double) quote.
+		</blockquote>
+	</blockquote>
+
+</section>
+<section>
+<h2>Tables</h2>
+
+<section>
+<h3>Simple Table</h3>
+
+<table class="tableborder">
+<tr>
+<td>col A</td>
+<td>col B</td>
+<td>col C</td>
+</tr>
+<tr>
+<td>val 1</td>
+<td>val 2</td>
+<td>val 3</td>
+</tr>
+<tr>
+<td>val 4</td>
+<td>val 5</td>
+<td>val 6</td>
+</tr>
+</table>
+
+</section>
+<section>
+<h3>Table With Header</h3>
+
+<table>
+<tr>
+<th>head 1</th>
+<th>head 2</th>
+<th>head 3</th>
+</tr>
+<tr>
+<td class="right">cell 1</td>
+<td class="right">cell 2</td>
+<td class="right">cell 3</td>
+</tr>
+<tr>
+<td class="right">cell 4</td>
+<td class="right">cell 5</td>
+<td class="right">cell 6</td>
+</tr>
+</table>
+
+</section>
+<section>
+<h3>Aligned Table</h3>
+
+<table>
+<tr>
+<th>Name</th>
+<th>Age</th>
+<th>City</th>
+</tr>
+<tr>
+<td class="center">Alice</td>
+<td class="right">30</td>
+<td>Paris</td>
+</tr>
+<tr>
+<td class="center">Bob</td>
+<td class="right">25</td>
+<td>Lyon</td>
+</tr>
+<tr>
+<td class="right">Charlotte</td>
+<td class="right">35</td>
+<td>Marseille</td>
+</tr>
+</table>
+
+</section>
+</section>
+<section>
+<h2>Special Characters</h2>
+
+<p>
+Angle brackets: &lt; and &gt;
+Ampersand: &amp;
+At sign: <a href="mailto:x@example.com">x@example.com</a> (auto-linked email)
+Percent: 50%
+Backslash: \\
+</p>
+
+</section>
+<section>
+<h2>Inline Verbatim</h2>
+
+<p>
+Use <code>print()</code> to display output.
+The <code>for</code> loop iterates over items.
+</p>
+
+</section>
+<section>
+<h2>Multiline Verbatim</h2>
+
+<pre>
+  line one
+  line two
+  line three
+</pre>
+
+</section>
+<section>
+<h2>End of Document</h2>
+
+<p>
+This is the last paragraph.
+</p>
+</section>
+</section>
+
+<!-- html5 code generated by txt2tags 2.6. (http://txt2tags.org) -->
+<!-- cmdline: txt2tags -t html5 -o /home/alan/src/txt2tags-ports/txt2tags-ports/targets/html5/input.html /home/alan/src/txt2tags-ports/txt2tags-ports/tests/input.t2t -->
+</article></body></html>

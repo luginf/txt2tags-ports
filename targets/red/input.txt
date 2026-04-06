@@ -1,0 +1,146 @@
+h1. TXT2TAGS TEST INPUT
+
+Author: Test Suite
+Date: 2026-01-01
+
+
+h1. Level 1 Title
+
+h2. Level 2 Title
+
+h3. Level 3 Title
+
+h4. Level 4 Title
+
+h5. Level 5 Title
+
+h2. Inline Markup
+
+Normal text. *Bold text*. _Italic text_. +Underline text+.
+-Strikethrough-. @Monospaced text@.
+
+*Bold and _italic_ combined*. _Italic and +underline+ combined_.
+
+Escaped char: \*not bold*.
+
+h2. Paragraphs
+
+First paragraph with some content.
+Still the first paragraph (line continuation).
+
+Second paragraph after blank line.
+
+h2. Horizontal Bars
+
+---
+
+---
+
+h2. Lists
+
+h3. Unordered List
+
+* First item
+* Second item
+** Nested item A
+** Nested item B
+*** Deeply nested
+* Third item
+
+=== Ordered List ===
+
+
+# First step
+# Second step
+## Sub-step one
+## Sub-step two
+# Third step
+
+=== Definition List ===
+
+
+* Term One
+Definition of term one.
+* Term Two
+Definition of term two.
+* Term Three
+A longer definition that spans
+multiple source lines.
+
+h2. Links
+
+A bare URL: http://txt2tags.org
+
+A named link: "TXT2TAGS":http://txt2tags.org
+
+A local anchor link: "Introduction":#level-1-title
+
+h2. Images
+
+!=portrait.png!
+
+h2. Verbatim Block
+
+<pre>
+def hello(name):
+    print("Hello, " + name)
+
+hello("world")
+</pre>
+
+h2. Raw Block
+
+<b>This is raw HTML — passed through as-is.</b>
+
+h2. Quote Block
+
+bq. Single level quote.
+bq. Still inside the quote.
+bq. Nested (double) quote.
+
+h2. Tables
+
+h3. Simple Table
+
+|. col A|. col B|. col C|
+|. val 1|. val 2|. val 3|
+|. val 4|. val 5|. val 6|
+
+h3. Table With Header
+
+|_.head 1|_.head 2|_.head 3|
+|. cell 1|. cell 2|. cell 3|
+|. cell 4|. cell 5|. cell 6|
+
+h3. Aligned Table
+
+|_.Name|_.Age|_.City|
+|. Alice|. 30|. Paris|
+|. Bob|. 25|. Lyon|
+|. Charlotte|. 35|. Marseille|
+
+h2. Special Characters
+
+Angle brackets: < and >
+Ampersand: &
+At sign: x@example.com (auto-linked email)
+Percent: 50%
+Backslash: \\
+
+h2. Inline Verbatim
+
+Use @print()@ to display output.
+The @for@ loop iterates over items.
+
+h2. Multiline Verbatim
+
+<pre>
+line one
+line two
+line three
+</pre>
+
+h2. End of Document
+
+This is the last paragraph.
+

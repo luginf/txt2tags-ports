@@ -1,0 +1,195 @@
+<?xml version="1.0"
+      encoding="UTF-8"
+?>
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "docbook/dtd/xml/4.5/docbookx.dtd">
+<article lang="en">
+  <articleinfo>
+    <title>TXT2TAGS TEST INPUT</title>
+    <authorgroup>
+      <author><othername>Test Suite</othername></author>
+    </authorgroup>
+    <date>2026-01-01</date>
+  </articleinfo>
+
+<sect1><title>Level 1 Title</title>
+  <sect2><title>Level 2 Title</title>
+    <sect3><title>Level 3 Title</title>
+      <sect4><title>Level 4 Title</title>
+        <sect5><title>Level 5 Title</title>
+        </sect5>
+      </sect4>
+    </sect3>
+  </sect2>
+  <sect2><title>Inline Markup</title>
+<para>
+Normal text. <emphasis role="bold">Bold text</emphasis>. <emphasis>Italic text</emphasis>. <emphasis role="underline">Underline text</emphasis>.
+Strikethrough. <code>Monospaced text</code>.
+</para>
+<para>
+<emphasis role="bold">Bold and <emphasis>italic</emphasis> combined</emphasis>. <emphasis>Italic and <emphasis role="underline">underline</emphasis> combined</emphasis>.
+</para>
+<para>
+Escaped char: \<emphasis role="bold">not bold</emphasis>.
+</para>
+  </sect2>
+  <sect2><title>Paragraphs</title>
+<para>
+First paragraph with some content.
+Still the first paragraph (line continuation).
+</para>
+<para>
+Second paragraph after blank line.
+</para>
+  </sect2>
+  <sect2><title>Horizontal Bars</title>
+
+
+  </sect2>
+  <sect2><title>Lists</title>
+    <sect3><title>Unordered List</title>
+<itemizedlist>
+<listitem><para>First item
+</para></listitem>
+<listitem><para>Second item
+<itemizedlist>
+<listitem><para>Nested item A
+</para></listitem>
+<listitem><para>Nested item B
+<itemizedlist>
+<listitem><para>Deeply nested
+</para></listitem>
+</itemizedlist>
+</para></listitem>
+</itemizedlist>
+</para></listitem>
+<listitem><para>Third item
+<para></para>
+=== Ordered List ===
+<para></para>
+</para></listitem>
+</itemizedlist>
+<orderedlist numeration="arabic">
+<listitem><para>First step
+</para></listitem>
+<listitem><para>Second step
+<orderedlist numeration="arabic">
+<listitem><para>Sub-step one
+</para></listitem>
+<listitem><para>Sub-step two
+</para></listitem>
+</orderedlist>
+</para></listitem>
+<listitem><para>Third step
+<para></para>
+=== Definition List ===
+<para></para>
+</para></listitem>
+</orderedlist>
+<variablelist>
+<varlistentry><term>Term One</term><listitem><para>
+Definition of term one.
+</para></listitem></varlistentry>
+<varlistentry><term>Term Two</term><listitem><para>
+Definition of term two.
+</para></listitem></varlistentry>
+<varlistentry><term>Term Three</term><listitem><para>
+A longer definition that spans
+multiple source lines.
+</para></listitem></varlistentry>
+</variablelist>
+    </sect3>
+  </sect2>
+  <sect2><title>Links</title>
+<para>
+A bare URL: <ulink url="http://txt2tags.org">http://txt2tags.org</ulink>
+</para>
+<para>
+A named link: <ulink url="http://txt2tags.org">TXT2TAGS</ulink>
+</para>
+<para>
+A local anchor link: <ulink url="#level-1-title">Introduction</ulink>
+</para>
+  </sect2>
+  <sect2><title>Images</title>
+<para>
+<mediaobject><imageobject><imagedata fileref="portrait.png"/></imageobject></mediaobject>
+</para>
+  </sect2>
+  <sect2><title>Verbatim Block</title>
+<programlisting>
+def hello(name):
+    print("Hello, " + name)
+
+hello("world")
+</programlisting>
+  </sect2>
+  <sect2><title>Raw Block</title>
+&lt;b&gt;This is raw HTML — passed through as-is.&lt;/b&gt;
+  </sect2>
+  <sect2><title>Quote Block</title>
+	<blockquote><para>
+Single level quote.
+Still inside the quote.
+	</para></blockquote>
+	<blockquote><para>
+		<blockquote><para>
+Nested (double) quote.
+		</para></blockquote>
+	</para></blockquote>
+  </sect2>
+  <sect2><title>Tables</title>
+    <sect3><title>Simple Table</title>
+<informaltable><tgroup cols="3"><tbody>
+<row><entry>col A</entry><entry>col B</entry><entry>col C</entry></row>
+<row><entry>val 1</entry><entry>val 2</entry><entry>val 3</entry></row>
+<row><entry>val 4</entry><entry>val 5</entry><entry>val 6</entry></row>
+</tbody></tgroup></informaltable>
+    </sect3>
+    <sect3><title>Table With Header</title>
+<informaltable><tgroup cols="3"><tbody>
+<thead><entry>head 1</entry><entry>head 2</entry><entry>head 3</entry></thead>
+<row><entry> cell 1</entry><entry> cell 2</entry><entry> cell 3</entry></row>
+<row><entry> cell 4</entry><entry> cell 5</entry><entry> cell 6</entry></row>
+</tbody></tgroup></informaltable>
+    </sect3>
+    <sect3><title>Aligned Table</title>
+<informaltable><tgroup cols="3"><tbody>
+<thead><entry>Name     </entry><entry>Age</entry><entry>City</entry></thead>
+<row><entry> Alice    </entry><entry> 30</entry><entry>Paris</entry></row>
+<row><entry> Bob      </entry><entry> 25</entry><entry>Lyon</entry></row>
+<row><entry> Charlotte</entry><entry> 35</entry><entry>Marseille</entry></row>
+</tbody></tgroup></informaltable>
+    </sect3>
+  </sect2>
+  <sect2><title>Special Characters</title>
+<para>
+Angle brackets: &lt; and &gt;
+Ampersand: &amp;
+At sign: <email>x@example.com</email> (auto-linked email)
+Percent: 50%
+Backslash: \\
+</para>
+  </sect2>
+  <sect2><title>Inline Verbatim</title>
+<para>
+Use <code>print()</code> to display output.
+The <code>for</code> loop iterates over items.
+</para>
+  </sect2>
+  <sect2><title>Multiline Verbatim</title>
+<programlisting>
+line one
+line two
+line three
+</programlisting>
+  </sect2>
+  <sect2><title>End of Document</title>
+<para>
+This is the last paragraph.
+</para>
+  </sect2>
+</sect1>
+
+<!-- dbk code generated by txt2tags 2.6. (http://txt2tags.org) -->
+<!-- cmdline: txt2tags -t dbk -o /home/alan/src/txt2tags-ports/txt2tags-ports/targets/dbk/input.xml /home/alan/src/txt2tags-ports/txt2tags-ports/tests/input.t2t -->
+</article>

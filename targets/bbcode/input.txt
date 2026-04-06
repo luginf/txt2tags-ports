@@ -1,0 +1,157 @@
+TXT2TAGS TEST INPUT
+Test Suite
+2026-01-01
+
+
+[size=200]Level 1 Title[/size]
+
+[size=170]Level 2 Title[/size]
+
+[size=150]Level 3 Title[/size]
+
+[size=130]Level 4 Title[/size]
+
+[size=120]Level 5 Title[/size]
+
+[size=170]Inline Markup[/size]
+
+Normal text. [b]Bold text[/b]. [i]Italic text[/i]. [u]Underline text[/u].
+Strikethrough. [code]Monospaced text[/code].
+
+[b]Bold and [i]italic[/i] combined[/b]. [i]Italic and [u]underline[/u] combined[/i].
+
+Escaped char: \[b]not bold[/b].
+
+[size=170]Paragraphs[/size]
+
+First paragraph with some content.
+Still the first paragraph (line continuation).
+
+Second paragraph after blank line.
+
+[size=170]Horizontal Bars[/size]
+
+
+
+
+
+[size=170]Lists[/size]
+
+[size=150]Unordered List[/size]
+
+[list]
+[*] First item
+[*] Second item
+[list]
+[*] Nested item A
+[*] Nested item B
+[list]
+[*] Deeply nested
+[/list]
+[/list]
+[*] Third item
+
+=== Ordered List ===
+
+[/list]
+
+[list=1]
+[*] First step
+[*] Second step
+[list=1]
+[*] Sub-step one
+[*] Sub-step two
+[/list]
+[*] Third step
+
+=== Definition List ===
+
+[/list]
+
+Term One
+Definition of term one.
+Term Two
+Definition of term two.
+Term Three
+A longer definition that spans
+multiple source lines.
+
+[size=170]Links[/size]
+
+A bare URL: [url]http://txt2tags.org[/url]
+
+A named link: [url=http://txt2tags.org]TXT2TAGS[/url]
+
+A local anchor link: [url=#level-1-title]Introduction[/url]
+
+[size=170]Images[/size]
+
+[img]portrait.png[/img]
+
+[size=170]Verbatim Block[/size]
+
+def hello(name):
+    print("Hello, " + name)
+
+hello("world")
+
+[size=170]Raw Block[/size]
+
+<b>This is raw HTML — passed through as-is.</b>
+
+[size=170]Quote Block[/size]
+
+	[quote]
+	Single level quote.
+	Still inside the quote.
+	[/quote]
+	[quote]
+		[quote]
+		Nested (double) quote.
+		[/quote]
+	[/quote]
+
+[size=170]Tables[/size]
+
+[size=150]Simple Table[/size]
+
+| col A | col B | col C |
+| val 1 | val 2 | val 3 |
+| val 4 | val 5 | val 6 |
+
+[size=150]Table With Header[/size]
+
+|| head 1 | head 2 | head 3
+|  cell 1 |  cell 2 |  cell 3
+|  cell 4 |  cell 5 |  cell 6
+
+[size=150]Aligned Table[/size]
+
+|| Name      | Age | City
+|  Alice     |  30 | Paris
+|  Bob       |  25 | Lyon
+|  Charlotte |  35 | Marseille
+
+[size=170]Special Characters[/size]
+
+Angle brackets: < and >
+Ampersand: &
+At sign:  (auto-linked email)
+Percent: 50%
+Backslash: \\
+
+[size=170]Inline Verbatim[/size]
+
+Use [code]print()[/code] to display output.
+The [code]for[/code] loop iterates over items.
+
+[size=170]Multiline Verbatim[/size]
+
+line one
+line two
+line three
+
+[size=170]End of Document[/size]
+
+This is the last paragraph.
+

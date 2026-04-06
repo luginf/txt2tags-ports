@@ -1,0 +1,338 @@
+#!/usr/X11R6/bin/mgp -t 90
+%deffont "normal"    xfont  "utopia-medium-r", charset "iso8859-1"
+%deffont "normal-i"  xfont  "utopia-medium-i", charset "iso8859-1"
+%deffont "normal-b"  xfont  "utopia-bold-r"  , charset "iso8859-1"
+%deffont "normal-bi" xfont  "utopia-bold-i"  , charset "iso8859-1"
+%deffont "mono"      xfont "courier-medium-r", charset "iso8859-1"
+%default 1 size 5
+%default 2 size 8, fore "yellow", font "normal-b", center
+%default 3 size 5, fore "white",  font "normal", left, prefix "  "
+%tab 1 size 4, vgap 30, prefix "     ", icon arc "red" 40, leftfill
+%tab 2 prefix "            ", icon arc "orange" 40, leftfill
+%tab 3 prefix "                   ", icon arc "brown" 40, leftfill
+%tab 4 prefix "                          ", icon arc "darkmagenta" 40, leftfill
+%tab 5 prefix "                                ", icon arc "magenta" 40, leftfill
+%%------------------------- end of headers -----------------------------
+%page
+
+
+
+
+
+%size 10, center, fore "yellow"
+TXT2TAGS TEST INPUT
+
+%font "normal-i", size 6, fore "white", center
+Test Suite
+
+%font "mono", size 7, center
+2026-01-01
+
+%page
+
+Level 1 Title
+
+%page
+
+Level 2 Title
+
+%page
+
+Level 3 Title
+
+%page
+
+Level 4 Title
+
+%page
+
+Level 5 Title
+
+%page
+
+Inline Markup
+
+
+%font "normal", size 5
+Normal text. 
+%cont, font "normal-b"
+Bold text
+%cont, font "normal"
+. 
+%cont, font "normal-i"
+Italic text
+%cont, font "normal"
+. 
+%cont, fore "cyan"
+Underline text
+%cont, fore "white"
+.
+Strikethrough. 
+%cont, font "mono"
+Monospaced text
+%cont, font "normal"
+.
+
+%font "normal", size 5
+
+%cont, font "normal-b"
+Bold and 
+%cont, font "normal-i"
+italic
+%cont, font "normal"
+ combined
+%cont, font "normal"
+. 
+%cont, font "normal-i"
+Italic and 
+%cont, fore "cyan"
+underline
+%cont, fore "white"
+ combined
+%cont, font "normal"
+.
+
+%font "normal", size 5
+Escaped char: \
+%cont, font "normal-b"
+not bold
+%cont, font "normal"
+.
+
+%page
+
+Paragraphs
+
+
+%font "normal", size 5
+First paragraph with some content.
+Still the first paragraph (line continuation).
+
+%font "normal", size 5
+Second paragraph after blank line.
+
+%page
+
+Horizontal Bars
+
+
+%bar "white" 5
+
+%pause
+
+%page
+
+Lists
+
+%page
+
+Unordered List
+
+
+	First item
+	Second item
+		Nested item A
+		Nested item B
+			Deeply nested
+	Third item
+
+=== Ordered List ===
+
+
+	1. First step
+	2. Second step
+		1. Sub-step one
+		2. Sub-step two
+	3. Third step
+
+=== Definition List ===
+
+
+	
+%cont, font "normal-b"
+Term One
+%cont, font "normal"
+
+Definition of term one.
+	
+%cont, font "normal-b"
+Term Two
+%cont, font "normal"
+
+Definition of term two.
+	
+%cont, font "normal-b"
+Term Three
+%cont, font "normal"
+
+A longer definition that spans
+multiple source lines.
+
+%page
+
+Links
+
+
+%font "normal", size 5
+A bare URL: 
+%cont, fore "cyan"
+http://txt2tags.org
+%cont, fore "white"
+
+
+%font "normal", size 5
+A named link: TXT2TAGS 
+%cont, fore "cyan"
+http://txt2tags.org
+%cont, fore "white"
+
+
+%font "normal", size 5
+A local anchor link: Introduction 
+%cont, fore "cyan"
+#level-1-title
+%cont, fore "white"
+
+
+%page
+
+Images
+
+
+%font "normal", size 5
+
+%center
+%newimage "portrait.png"
+%left
+
+
+%page
+
+Verbatim Block
+
+
+%font "mono"
+def hello(name):
+    print("Hello, " + name)
+
+hello("world")
+%font "normal"
+
+%page
+
+Raw Block
+
+<b>This is raw HTML — passed through as-is.</b>
+%page
+
+Quote Block
+
+%prefix "       "
+Single level quote.
+Still inside the quote.
+%prefix "  "
+%prefix "       "
+%prefix "       "
+Nested (double) quote.
+%prefix "  "
+%prefix "  "
+%page
+
+Tables
+
+%page
+
+Simple Table
+
+%font "mono"
+  +-------+-------+-------+
+  | col A | col B | col C |
+  +-------+-------+-------+
+  | val 1 | val 2 | val 3 |
+  +-------+-------+-------+
+  | val 4 | val 5 | val 6 |
+  +-------+-------+-------+
+
+%page
+
+Table With Header
+
+%font "mono"
+  +---------+---------+---------+
+  | head 1  | head 2  | head 3  |
+  +=========+=========+=========+
+  |  cell 1 |  cell 2 |  cell 3 |
+  +---------+---------+---------+
+  |  cell 4 |  cell 5 |  cell 6 |
+  +---------+---------+---------+
+
+%page
+
+Aligned Table
+
+%font "mono"
+  +------------+-----+-----------+
+  | Name       | Age | City      |
+  +============+=====+===========+
+  |  Alice     |  30 | Paris     |
+  +------------+-----+-----------+
+  |  Bob       |  25 | Lyon      |
+  +------------+-----+-----------+
+  |  Charlotte |  35 | Marseille |
+  +------------+-----+-----------+
+
+%page
+
+Special Characters
+
+
+%font "normal", size 5
+Angle brackets: < and >
+Ampersand: &
+At sign: 
+%cont, fore "cyan"
+x@example.com
+%cont, fore "white"
+ (auto-linked email)
+Percent: 50%
+Backslash: \\
+
+%page
+
+Inline Verbatim
+
+
+%font "normal", size 5
+Use 
+%cont, font "mono"
+print()
+%cont, font "normal"
+ to display output.
+The 
+%cont, font "mono"
+for
+%cont, font "normal"
+ loop iterates over items.
+
+%page
+
+Multiline Verbatim
+
+
+%font "mono"
+line one
+line two
+line three
+%font "normal"
+
+%page
+
+End of Document
+
+
+%font "normal", size 5
+This is the last paragraph.
+
+%% mgp code generated by txt2tags 2.6. (http://txt2tags.org)
+%% cmdline: txt2tags -t mgp -o /home/alan/src/txt2tags-ports/txt2tags-ports/targets/mgp/input.mgp /home/alan/src/txt2tags-ports/txt2tags-ports/tests/input.t2t
+%%EOD

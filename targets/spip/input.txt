@@ -1,0 +1,157 @@
+{{{TXT2TAGS TEST INPUT}}}
+
+{{Test Suite}}
+
+{2026-01-01}
+
+
+
+{{{ Level 1 Title }}}
+
+<h4>Level 2 Title</h4>
+
+<h5>Level 3 Title</h5>
+
+
+
+
+
+<h4>Inline Markup</h4>
+
+Normal text. {{Bold text}}. {Italic text}. <u>Underline text</u>.
+<del>Strikethrough</del>. <code>Monospaced text</code>.
+
+{{Bold and {italic} combined}}. {Italic and <u>underline</u> combined}.
+
+Escaped char: \{{not bold}}.
+
+<h4>Paragraphs</h4>
+
+First paragraph with some content.
+Still the first paragraph (line continuation).
+
+Second paragraph after blank line.
+
+<h4>Horizontal Bars</h4>
+
+----
+
+----
+
+<h4>Lists</h4>
+
+<h5>Unordered List</h5>
+
+-* First item
+-* Second item
+-** Nested item A
+-** Nested item B
+-*** Deeply nested
+-* Third item
+
+=== Ordered List ===
+
+
+-#First step
+-#Second step
+-##Sub-step one
+-##Sub-step two
+-#Third step
+
+=== Definition List ===
+
+
+Term One
+Definition of term one.
+Term Two
+Definition of term two.
+Term Three
+A longer definition that spans
+multiple source lines.
+
+<h4>Links</h4>
+
+A bare URL: [->http://txt2tags.org]
+
+A named link: [TXT2TAGS->http://txt2tags.org]
+
+A local anchor link: [Introduction->#level-1-title]
+
+<h4>Images</h4>
+
+<img src="portrait.png" align="center" />
+
+<h4>Verbatim Block</h4>
+
+<cadre>
+def hello(name):
+    print("Hello, " + name)
+
+hello("world")
+</cadre>
+
+<h4>Raw Block</h4>
+
+<b>This is raw HTML — passed through as-is.</b>
+
+<h4>Quote Block</h4>
+
+	<quote>
+	Single level quote.
+	Still inside the quote.
+	</quote>
+
+	<quote>
+
+		<quote>
+		Nested (double) quote.
+		</quote>
+
+	</quote>
+
+<h4>Tables</h4>
+
+<h5>Simple Table</h5>
+
+| col A | col B | col C |
+| val 1 | val 2 | val 3 |
+| val 4 | val 5 | val 6 |
+
+<h5>Table With Header</h5>
+
+| {{head 1}} | {{head 2}} | {{head 3}} |
+| cell 1 | cell 2 | cell 3 |
+| cell 4 | cell 5 | cell 6 |
+
+<h5>Aligned Table</h5>
+
+| {{Name}} | {{Age}} | {{City}} |
+| Alice | 30 | Paris |
+| Bob | 25 | Lyon |
+| Charlotte | 35 | Marseille |
+
+<h4>Special Characters</h4>
+
+Angle brackets: < and >
+Ampersand: &
+At sign: [->x@example.com] (auto-linked email)
+Percent: 50%
+Backslash: \\
+
+<h4>Inline Verbatim</h4>
+
+Use <code>print()</code> to display output.
+The <code>for</code> loop iterates over items.
+
+<h4>Multiline Verbatim</h4>
+
+<cadre>
+line one
+line two
+line three
+</cadre>
+
+<h4>End of Document</h4>
+
+This is the last paragraph.
+

@@ -1,0 +1,315 @@
+@SysInclude { doc }
+@SysInclude { tbl }
+@Document
+  @InitialFont { Times Base 12p }  # Times, Courier, Helvetica, ...
+  @PageOrientation { Portrait }    # Portrait, Landscape
+  @ColumnNumber { 1 }              # Number of columns (2, 3, ...)
+  @PageHeaders { Simple }          # None, Simple, Titles, NoTitles
+  @InitialLanguage { English }     # German, French, Portuguese, ...
+  @OptimizePages { Yes }           # Yes/No smart page break feature
+//
+@Text @Begin
+@Display @Heading { TXT2TAGS TEST INPUT }
+@Display @I { Test Suite }
+@Display { 2026-01-01 }
+#@NP                               # Break page after Headers
+
+
+@BeginSections
+@Section @Title { Level 1 Title } @Begin
+
+ @BeginSubSections
+ @SubSection @Title { Level 2 Title } @Begin
+
+  @BeginSubSubSections
+  @SubSubSection @Title { Level 3 Title } @Begin
+
+@LP @LeftDisplay @B { Level 4 Title }
+
+@LP @LeftDisplay @B { Level 5 Title }
+
+  @End @SubSubSection
+  @EndSubSubSections
+ @End @SubSection
+ @SubSection @Title { Inline Markup } @Begin
+
+@LP
+Normal text. {@B {Bold text}}. {@II {Italic text}}. {@Underline{Underline text}}.
+Strikethrough. {@F {Monospaced text}}.
+
+@LP
+{@B {Bold and {@II {italic}} combined}}. {@II {Italic and {@Underline{underline}} combined}}.
+
+@LP
+Escaped char: "\\"{@B {not bold}}.
+
+ @End @SubSection
+ @SubSection @Title { Paragraphs } @Begin
+
+@LP
+First paragraph with some content.
+Still the first paragraph (line continuation).
+
+@LP
+Second paragraph after blank line.
+
+ @End @SubSection
+ @SubSection @Title { Horizontal Bars } @Begin
+
+@DP @FullWidthRule
+
+@DP @FullWidthRule
+
+ @End @SubSection
+ @SubSection @Title { Lists } @Begin
+
+  @BeginSubSubSections
+  @SubSubSection @Title { Unordered List } @Begin
+
+@BulletList
+@ListItem{First item
+}
+@ListItem{Second item
+@BulletList
+@ListItem{Nested item A
+}
+@ListItem{Nested item B
+@BulletList
+@ListItem{Deeply nested
+}
+@EndList
+}
+@EndList
+}
+@ListItem{Third item
+@LP
+=== Ordered List ===
+@LP
+}
+@EndList
+
+@NumberedList
+@ListItem{First step
+}
+@ListItem{Second step
+@NumberedList
+@ListItem{Sub-step one
+}
+@ListItem{Sub-step two
+}
+@EndList
+}
+@ListItem{Third step
+@LP
+=== Definition List ===
+@LP
+}
+@EndList
+
+@TaggedList
+@DropTagItem {Term One}{
+Definition of term one.
+}
+@DropTagItem {Term Two}{
+Definition of term two.
+}
+@DropTagItem {Term Three}{
+A longer definition that spans
+multiple source lines.
+}
+@EndList
+
+  @End @SubSubSection
+  @EndSubSubSections
+ @End @SubSection
+ @SubSection @Title { Links } @Begin
+
+@LP
+A bare URL: {blue @Colour { http:"/""/"txt2tags.org }}
+
+@LP
+A named link: TXT2TAGS ({blue @Colour { http:"/""/"txt2tags.org }})
+
+@LP
+A local anchor link: Introduction ({blue @Colour { "#"level-1-title }})
+
+ @End @SubSection
+ @SubSection @Title { Images } @Begin
+
+@LP
+@CentredDisplay @IncludeGraphic { portrait.png }
+
+ @End @SubSection
+ @SubSection @Title { Verbatim Block } @Begin
+
+@LP @ID @F @RawVerbatim @Begin
+def hello(name):
+    print("Hello, " + name)
+
+hello("world")
+@End @RawVerbatim
+
+ @End @SubSection
+ @SubSection @Title { Raw Block } @Begin
+
+<b>This is raw HTML — passed through as-is.</b>
+
+ @End @SubSection
+ @SubSection @Title { Quote Block } @Begin
+
+	@QD {
+	Single level quote.
+	Still inside the quote.
+	}
+	@QD {
+		@QD {
+		Nested (double) quote.
+		}
+	}
+
+ @End @SubSection
+ @SubSection @Title { Tables } @Begin
+
+  @BeginSubSubSections
+  @SubSubSection @Title { Simple Table } @Begin
+
+@LP
+@CentredDisplay @Tbl
+rule {yes}
+{
+@Row
+format {  @Cell  indent { left } A | @Cell  indent { left } B | @Cell  indent { left } C  }
+A { col A }
+B { col B }
+C { col C }
+
+@Row
+format {  @Cell  indent { left } A | @Cell  indent { left } B | @Cell  indent { left } C  }
+A { val 1 }
+B { val 2 }
+C { val 3 }
+
+@Row
+format {  @Cell  indent { left } A | @Cell  indent { left } B | @Cell  indent { left } C  }
+A { val 4 }
+B { val 5 }
+C { val 6 }
+
+
+}
+
+  @End @SubSubSection
+  @SubSubSection @Title { Table With Header } @Begin
+
+@LP
+@CentredDisplay @Tbl
+{
+@HeaderRow
+format {  @Cell  indent { left } A | @Cell  indent { left } B | @Cell  indent { left } C  }
+A { @B { head 1 } }
+B { @B { head 2 } }
+C { @B { head 3 } }
+@EndHeaderRow
+
+@Row
+format {  @Cell  indent { left } A | @Cell  indent { left } B | @Cell  indent { left } C  }
+A { @B { head 1 } }
+B { @B { head 2 } }
+C { @B { head 3 } }
+
+@Row
+format {  @Cell  indent { right } A | @Cell  indent { right } B | @Cell  indent { right } C  }
+A { cell 1 }
+B { cell 2 }
+C { cell 3 }
+
+@Row
+format {  @Cell  indent { right } A | @Cell  indent { right } B | @Cell  indent { right } C  }
+A { cell 4 }
+B { cell 5 }
+C { cell 6 }
+
+
+}
+
+  @End @SubSubSection
+  @SubSubSection @Title { Aligned Table } @Begin
+
+@LP
+@CentredDisplay @Tbl
+{
+@HeaderRow
+format {  @Cell  indent { left } A | @Cell  indent { left } B | @Cell  indent { left } C  }
+A { @B { Name } }
+B { @B { Age } }
+C { @B { City } }
+@EndHeaderRow
+
+@Row
+format {  @Cell  indent { left } A | @Cell  indent { left } B | @Cell  indent { left } C  }
+A { @B { Name } }
+B { @B { Age } }
+C { @B { City } }
+
+@Row
+format {  @Cell  indent { ctr } A | @Cell  indent { right } B | @Cell  indent { left } C  }
+A { Alice }
+B { 30 }
+C { Paris }
+
+@Row
+format {  @Cell  indent { ctr } A | @Cell  indent { right } B | @Cell  indent { left } C  }
+A { Bob }
+B { 25 }
+C { Lyon }
+
+@Row
+format {  @Cell  indent { right } A | @Cell  indent { right } B | @Cell  indent { left } C  }
+A { Charlotte }
+B { 35 }
+C { Marseille }
+
+
+}
+
+  @End @SubSubSection
+  @EndSubSubSections
+ @End @SubSection
+ @SubSection @Title { Special Characters } @Begin
+
+@LP
+Angle brackets: < and >
+Ampersand: "&"
+At sign: {blue @Colour { x"@"example.com }} (auto-linked email)
+Percent: 50%
+Backslash: "\\""\\"
+
+ @End @SubSection
+ @SubSection @Title { Inline Verbatim } @Begin
+
+@LP
+Use {@F {print()}} to display output.
+The {@F {for}} loop iterates over items.
+
+ @End @SubSection
+ @SubSection @Title { Multiline Verbatim } @Begin
+
+@LP @ID @F @RawVerbatim @Begin
+line one
+line two
+line three
+@End @RawVerbatim
+
+ @End @SubSection
+ @SubSection @Title { End of Document } @Begin
+
+@LP
+This is the last paragraph.
+
+ @End @SubSection
+ @EndSubSections
+@End @Section
+@EndSections
+# lout code generated by txt2tags 2.6. (http://txt2tags.org)
+# cmdline: txt2tags -t lout -o /home/alan/src/txt2tags-ports/txt2tags-ports/targets/lout/input.lout /home/alan/src/txt2tags-ports/txt2tags-ports/tests/input.t2t
+@End @Text

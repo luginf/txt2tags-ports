@@ -1,0 +1,199 @@
+TXT2TAGS TEST INPUT
+Test Suite
+2026-01-01
+
+
+<h1>Level 1 Title</h1>
+
+<h2>Level 2 Title</h2>
+
+<h3>Level 3 Title</h3>
+
+<h4>Level 4 Title</h4>
+
+<h5>Level 5 Title</h5>
+
+<h2>Inline Markup</h2>
+
+Normal text. <strong>Bold text</strong>. <em>Italic text</em>. <u>Underline text</u>. <s>Strikethrough</s>. <code>Monospaced text</code>.
+
+<strong>Bold and <em>italic</em> combined</strong>. <em>Italic and <u>underline</u> combined</em>.
+
+Escaped char: \<strong>not bold</strong>.
+
+<h2>Paragraphs</h2>
+
+First paragraph with some content. Still the first paragraph (line continuation).
+
+Second paragraph after blank line.
+
+<h2>Horizontal Bars</h2>
+
+<hr>
+
+<hr>
+
+<h2>Lists</h2>
+
+<h3>Unordered List</h3>
+
+<ul>
+<li>First item</li>
+<li>Second item
+<ul>
+<li>Nested item A</li>
+<li>Nested item B
+<ul>
+<li>Deeply nested</li>
+</ul></li>
+</ul></li>
+<li>Third item
+
+=== Ordered List ===
+</li>
+</ul>
+
+<ol>
+<li>First step</li>
+<li>Second step
+<ol>
+<li>Sub-step one</li>
+<li>Sub-step two</li>
+</ol></li>
+<li>Third step
+
+=== Definition List ===
+</li>
+</ol>
+
+<dl>
+<dt>Term One</dt><dd>
+Definition of term one.</dd>
+<dt>Term Two</dt><dd>
+Definition of term two.</dd>
+<dt>Term Three</dt><dd>
+A longer definition that spans
+multiple source lines.</dd>
+</dl>
+
+<h2>Links</h2>
+
+A bare URL: <a href="http://txt2tags.org">http://txt2tags.org</a>
+
+A named link: <a href="http://txt2tags.org">TXT2TAGS</a>
+
+A local anchor link: <a href="#level-1-title">Introduction</a>
+
+<h2>Images</h2>
+
+<img align="middle" src="portrait.png" border="0" alt="">
+
+<h2>Verbatim Block</h2>
+
+<pre>
+def hello(name):
+    print("Hello, " + name)
+
+hello("world")
+</pre>
+
+<h2>Raw Block</h2>
+
+&lt;b&gt;This is raw HTML — passed through as-is.&lt;/b&gt;
+
+<h2>Quote Block</h2>
+
+<blockquote>
+Single level quote. Still inside the quote.
+</blockquote>
+<blockquote>
+Nested (double) quote.
+</blockquote>
+
+<h2>Tables</h2>
+
+<h3>Simple Table</h3>
+
+<table border="1">
+<tr>
+<td>col A</td>
+<td>col B</td>
+<td>col C</td>
+</tr>
+<tr>
+<td>val 1</td>
+<td>val 2</td>
+<td>val 3</td>
+</tr>
+<tr>
+<td>val 4</td>
+<td>val 5</td>
+<td>val 6</td>
+</tr>
+</table>
+
+<h3>Table With Header</h3>
+
+<table>
+<tr>
+<th>head 1</th>
+<th>head 2</th>
+<th>head 3</th>
+</tr>
+<tr>
+<td align="right">cell 1</td>
+<td align="right">cell 2</td>
+<td align="right">cell 3</td>
+</tr>
+<tr>
+<td align="right">cell 4</td>
+<td align="right">cell 5</td>
+<td align="right">cell 6</td>
+</tr>
+</table>
+
+<h3>Aligned Table</h3>
+
+<table>
+<tr>
+<th>Name</th>
+<th>Age</th>
+<th>City</th>
+</tr>
+<tr>
+<td align="center">Alice</td>
+<td align="right">30</td>
+<td>Paris</td>
+</tr>
+<tr>
+<td align="center">Bob</td>
+<td align="right">25</td>
+<td>Lyon</td>
+</tr>
+<tr>
+<td align="right">Charlotte</td>
+<td align="right">35</td>
+<td>Marseille</td>
+</tr>
+</table>
+
+<h2>Special Characters</h2>
+
+Angle brackets: &lt; and &gt; Ampersand: &amp; At sign: <a href="mailto:x@example.com">x@example.com</a> (auto-linked email) Percent: 50% Backslash: \\
+
+<h2>Inline Verbatim</h2>
+
+Use <code>print()</code> to display output. The <code>for</code> loop iterates over items.
+
+<h2>Multiline Verbatim</h2>
+
+<pre>
+line one
+line two
+line three
+</pre>
+
+<h2>End of Document</h2>
+
+This is the last paragraph.
+
