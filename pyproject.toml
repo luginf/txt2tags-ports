@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "txt2tags3-mod"
+version = "3.9.0"
+description = "txt2tags3 split into independent Python modules — converts plain text to HTML, LaTeX, RST, Markdown, and 40+ other formats"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+keywords = ["txt2tags", "markup", "converter", "html", "rst", "markdown", "latex"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: BSD Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Text Processing :: Filters",
+]
+
+[project.scripts]
+txt2tags3 = "txt2tags3_mod.__main__:exec_command_line"
+
+[project.urls]
+Homepage = "https://txt2tags.org"
+Repository = "https://github.com/luginf/txt2tags-ports"
+"Bug Tracker" = "https://github.com/luginf/txt2tags-ports/issues"
+
+[tool.setuptools.packages.find]
+include = ["txt2tags3_mod*"]
+
+[tool.setuptools.package-data]
+"txt2tags3_mod" = ["py.typed"]
