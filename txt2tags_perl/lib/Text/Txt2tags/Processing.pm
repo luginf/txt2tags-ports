@@ -119,6 +119,13 @@ BEGIN {
     *AUTOTOC = \$Text::Txt2tags::State::AUTOTOC;
     *ESCCHAR = \$Text::Txt2tags::Constants::ESCCHAR;
 }
+sub doEscape      { Text::Txt2tags::Output::doEscape(@_)      }
+sub doFinalEscape { Text::Txt2tags::Output::doFinalEscape(@_) }
+sub doProtect     { Text::Txt2tags::Output::doProtect(@_)     }
+sub enclose_me    { Text::Txt2tags::Output::enclose_me(@_)    }
+sub get_tagged_link { Text::Txt2tags::Output::get_tagged_link(@_) }
+sub maskEscapeChar  { Text::Txt2tags::Output::maskEscapeChar(@_)  }
+sub unmaskEscapeChar{ Text::Txt2tags::Output::unmaskEscapeChar(@_) }
 
 sub new {
     my ($class) = @_;

@@ -167,6 +167,7 @@ sub process_source_file {
         else {
             $full_parsed->{sourcefile}        = $file;
             $full_parsed->{currentsourcefile} = $file;
+            $full_parsed->{infile}            = $file;
         }
 
         if ($full_parsed->{'dump-config'}) {
@@ -563,7 +564,7 @@ sub convert_this_files {
 
 sub get_infiles_config {
     my ($infiles) = @_;
-    return [ map { process_source_file($_) } @$infiles ];
+    return [ map { [ process_source_file($_) ] } @$infiles ];
 }
 
 # ---------------------------------------------------------------------------

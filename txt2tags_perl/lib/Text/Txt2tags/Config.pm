@@ -478,6 +478,9 @@ sub sanity {
         $config->{width} ||= Text::Txt2tags::Constants::DFT_TEXT_WIDTH();
     }
 
+    # Determine output file name if not already set
+    $config->{outfile} ||= $self->get_outfile_name($config);
+
     return $config;
 }
 
