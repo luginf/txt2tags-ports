@@ -1,0 +1,222 @@
+#!/usr/bin/env perl
+# txt2tags - convert plain text to 40+ markup formats
+# Perl 5 port of txt2tags3_mod
+
+use strict;
+use warnings;
+use FindBin qw($RealBin);
+use lib "$RealBin/../lib";
+use Getopt::Long qw(:config bundling pass_through);
+use File::Basename;
+
+use Text::Txt2tags::Constants qw(
+    $MY_NAME $MY_VERSION $MY_URL $VERSIONSTR
+    %FLAGS %OPTIONS %ACTIONS @TARGETS %TARGET_NAMES
+    $STDIN $STDOUT
+);
+use Text::Txt2tags::State qw(
+    $DEBUG $VERBOSE $QUIET
+    @RC_RAW @CMDLINE_RAW
+);
+use Text::Txt2tags::Utils qw(Error Quit get_rc_path Readfile);
+use Text::Txt2tags::Config ();
+use Text::Txt2tags::Output qw(listTargets dumpConfig);
+use Text::Txt2tags::Converter qw(get_infiles_config convert_this_files process_source_file);
+
+# ---------------------------------------------------------------------------
+# Parse command line
+# ---------------------------------------------------------------------------
+
+my %cli_opts;
+GetOptions(
+    'target|t=s'        => \$cli_opts{target},
+    'outfile|o=s'       => \$cli_opts{outfile},
+    'toc'               => \$cli_opts{toc},
+    'no-toc'            => sub { $cli_opts{toc} = 0 },
+    'toc-only'          => \$cli_opts{'toc-only'},
+    'toc-level=i'       => \$cli_opts{'toc-level'},
+    'encoding=s'        => \$cli_opts{encoding},
+    'headers!'          => \$cli_opts{headers},
+    'enum-title'        => \$cli_opts{'enum-title'},
+    'mask-email'        => \$cli_opts{'mask-email'},
+    'style=s'           => \$cli_opts{style},
+    'css-sugar'         => \$cli_opts{'css-sugar'},
+    'css-inside'        => \$cli_opts{'css-inside'},
+    'width=i'           => \$cli_opts{width},
+    'height=i'          => \$cli_opts{height},
+    'config-file=s'     => \$cli_opts{'config-file'},
+    'template=s'        => \$cli_opts{template},
+    'fix-path'          => \$cli_opts{'fix-path'},
+    'embed-images'      => \$cli_opts{'embed-images'},
+    'quiet|q'           => \$cli_opts{quiet},
+    'verbose|v+'        => \$cli_opts{verbose},
+    'debug'             => \$cli_opts{debug},
+    'dump-config'       => \$cli_opts{'dump-config'},
+    'dump-source'       => \$cli_opts{'dump-source'},
+    'targets'           => \$cli_opts{targets},
+    'version|V'         => \$cli_opts{version},
+    'help|h'            => \$cli_opts{help},
+) or do { print_usage(); exit 1 };
+
+# ---- Immediate actions ---------------------------------------------------
+
+if ($cli_opts{version}) {
+    print "$VERSIONSTR\n";
+    exit 0;
+}
+
+if ($cli_opts{help}) {
+    print_help();
+    exit 0;
+}
+
+if ($cli_opts{targets}) {
+    listTargets();
+    exit 0;
+}
+
+# ---- Apply verbose/quiet/debug to State ----------------------------------
+
+$VERBOSE = $cli_opts{verbose} // 0;
+$QUIET   = $cli_opts{quiet}   // 0;
+$DEBUG   = $cli_opts{debug}   // 0;
+
+# ---- Read RC file --------------------------------------------------------
+
+my $rc_path = get_rc_path();
+if ($rc_path && -f $rc_path) {
+    my $rc_lines = Readfile($rc_path, 1, 1);
+    my $cl = Text::Txt2tags::ConfigLines->new(
+        file_  => $rc_path,
+        lines  => $rc_lines,
+        first_line => 1,
+    );
+    @RC_RAW = @{ $cl->get_raw_config };
+}
+
+# ---- Build CMDLINE_RAW from parsed options --------------------------------
+
+{
+    # Translate CLI options back into raw [target, key, value] triples
+    my %flag_map = (
+        toc          => 'toc',
+        'toc-only'   => 'toc-only',
+        'enum-title' => 'enum-title',
+        'mask-email' => 'mask-email',
+        'css-sugar'  => 'css-sugar',
+        'css-inside' => 'css-inside',
+        'fix-path'   => 'fix-path',
+        'embed-images'=> 'embed-images',
+        quiet        => 'quiet',
+        'dump-config'=> 'dump-config',
+        'dump-source'=> 'dump-source',
+    );
+    my %opt_map = (
+        target       => 'target',
+        outfile      => 'outfile',
+        encoding     => 'encoding',
+        style        => 'style',
+        width        => 'width',
+        height       => 'height',
+        'toc-level'  => 'toc-level',
+        template     => 'template',
+        'config-file'=> 'config-file',
+    );
+
+    for my $k (keys %flag_map) {
+        if ($cli_opts{$k}) {
+            push @CMDLINE_RAW, ['all', $flag_map{$k}, ''];
+        }
+    }
+    # headers=0 → no-headers
+    if (defined $cli_opts{headers} && !$cli_opts{headers}) {
+        push @CMDLINE_RAW, ['all', 'no-headers', ''];
+    }
+    for my $k (keys %opt_map) {
+        if (defined $cli_opts{$k} && $cli_opts{$k} ne '') {
+            push @CMDLINE_RAW, ['all', $opt_map{$k}, $cli_opts{$k}];
+        }
+    }
+    # verbose
+    if ($VERBOSE) {
+        push @CMDLINE_RAW, ['all', 'verbose', ''] for 1 .. $VERBOSE;
+    }
+}
+
+# ---- Collect infiles from remaining ARGV ---------------------------------
+
+my @infiles = @ARGV;
+@infiles = ($STDIN) unless @infiles;
+
+# ---- Run conversion ------------------------------------------------------
+
+eval {
+    my $configs = get_infiles_config(\@infiles);
+    convert_this_files($configs);
+};
+if (my $err = $@) {
+    if (ref $err && $err->isa('Text::Txt2tags::Error')) {
+        warn "$err\n";
+        exit 1;
+    }
+    die $err;
+}
+
+exit 0;
+
+# ---------------------------------------------------------------------------
+# Help / usage
+# ---------------------------------------------------------------------------
+
+sub print_usage {
+    print "Usage: txt2tags [OPTIONS] [FILE...]\n";
+    print "       txt2tags --help\n";
+}
+
+sub print_help {
+    print <<'END_HELP';
+txt2tags - convert plain text to 40+ markup formats
+
+Usage: txt2tags [OPTIONS] [FILE...]
+
+Input/output:
+  -t, --target TARGET   Set the output format (required)
+  -o, --outfile FILE    Set the output filename ('-' for STDOUT)
+      --encoding ENC    Set the document encoding
+
+Markup options:
+      --toc             Add Table of Contents
+      --toc-only        Print the TOC and exit
+      --toc-level N     Maximum TOC depth (default 3)
+      --no-headers      Suppress document header and footer
+      --enum-title      Number all titles automatically
+      --mask-email      Hide e-mail addresses from spambots
+
+Style:
+      --style FILE      Set stylesheet (may repeat)
+      --css-sugar       Add CSS helper classes to HTML tags
+      --css-inside      Embed CSS file contents inside HTML
+
+Output control:
+      --width N         Set output width (for text/ASCII-art targets)
+      --height N        Set slide height (for ASCII-art presentations)
+      --fix-path        Fix relative paths in links and images
+      --embed-images    Embed images as base64 inside the document
+
+Debugging:
+  -v, --verbose         Increase verbosity (-v, -vv, -vvv)
+      --debug           Show detailed debug output
+  -q, --quiet           Suppress all messages
+
+Info:
+      --targets         List all supported output targets
+      --dump-config     Print all config data and exit
+      --dump-source     Print the processed source and exit
+  -V, --version         Print version string
+  -h, --help            Show this help message
+
+Targets (use --targets for full list):
+  html  html5  xhtml  md  rst  adoc  tex  man  txt  ...
+
+END_HELP
+}

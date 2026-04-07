@@ -1,0 +1,13 @@
+requires 'perl', '5.016';
+requires 'Carp';
+requires 'Scalar::Util';
+requires 'List::Util';
+requires 'POSIX';
+requires 'Encode';
+requires 'File::Basename';
+requires 'Getopt::Long';
+
+on test => sub {
+    requires 'Test::More', '0.98';
+    requires 'Test::Exception';
+};
