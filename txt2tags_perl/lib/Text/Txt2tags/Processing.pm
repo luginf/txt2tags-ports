@@ -123,7 +123,8 @@ sub doEscape      { Text::Txt2tags::Output::doEscape(@_)      }
 sub doFinalEscape { Text::Txt2tags::Output::doFinalEscape(@_) }
 sub doProtect     { Text::Txt2tags::Output::doProtect(@_)     }
 sub enclose_me    { Text::Txt2tags::Output::enclose_me(@_)    }
-sub get_tagged_link { Text::Txt2tags::Output::get_tagged_link(@_) }
+sub get_tagged_link    { Text::Txt2tags::Output::get_tagged_link(@_) }
+sub fix_relative_path  { Text::Txt2tags::Output::fix_relative_path(@_) }
 sub maskEscapeChar  { Text::Txt2tags::Output::maskEscapeChar(@_)  }
 sub unmaskEscapeChar{ Text::Txt2tags::Output::unmaskEscapeChar(@_) }
 
@@ -151,13 +152,16 @@ sub new {
 
 sub reset {
     my ($self) = @_;
-    $self->{linkbank}   = [];
-    $self->{monobank}   = [];
-    $self->{macrobank}  = [];
-    $self->{rawbank}    = [];
-    $self->{taggedbank} = [];
-    $self->{mathbank}   = [];
-    $self->{math_masks} = [];
+    $self->{linkbank}      = [];
+    $self->{monobank}      = [];
+    $self->{monobank_orig} = [];
+    $self->{macrobank}     = [];
+    $self->{rawbank}       = [];
+    $self->{rawbank_orig}  = [];
+    $self->{taggedbank}    = [];
+    $self->{taggedbank_orig} = [];
+    $self->{mathbank}      = [];
+    $self->{math_masks}    = [];
 }
 
 sub mask {
@@ -174,26 +178,32 @@ sub mask {
 
         if ($t <= $r && $t <= $v && $t <= $m && $t < length($line)+1) {
             $line =~ $regex{tagged};
+            my $orig = $&;
             my $txt = $1;
             $txt = doProtect($TARGET, $txt);
             my $i = scalar @{ $self->{taggedbank} };
             push @{ $self->{taggedbank} }, $txt;
+            push @{ $self->{taggedbank_orig} }, $orig;
             (my $mask = $self->{taggedmask}) =~ s/NNN/$i/;
             $line =~ s/$regex{tagged}/$mask/;
         }
         elsif ($r <= $t && $r <= $v && $r <= $m && $r < length($line)+1) {
             $line =~ $regex{raw};
+            my $orig = $&;
             my $txt = doEscape($TARGET, $1);
             my $i = scalar @{ $self->{rawbank} };
             push @{ $self->{rawbank} }, $txt;
+            push @{ $self->{rawbank_orig} }, $orig;
             (my $mask = $self->{rawmask}) =~ s/NNN/$i/;
             $line =~ s/$regex{raw}/$mask/;
         }
         elsif ($v <= $t && $v <= $r && $v <= $m && $v < length($line)+1) {
             $line =~ $regex{fontMono};
+            my $orig = $&;
             my $txt = doEscape($TARGET, $1);
             my $i = scalar @{ $self->{monobank} };
             push @{ $self->{monobank} }, $txt;
+            push @{ $self->{monobank_orig} }, $orig;
             (my $mask = $self->{monomask}) =~ s/NNN/$i/;
             $line =~ s/$regex{fontMono}/$mask/;
         }
@@ -327,6 +337,59 @@ sub undo {
     return $line;
 }
 
+# undo_title: restore masks to ORIGINAL markup (for use in title text)
+# Raw/tagged/mono marks are kept as literal markup, not converted to HTML.
+sub undo_title {
+    my ($self, $line) = @_;
+
+    # Restore raw masks as literal ""content"" with HTML-escaped content
+    while ($line =~ /$self->{rawmaskre}/) {
+        my $i     = $1;
+        my $start = $-[0];
+        my $end   = $+[0];
+        my $literal = '""' . $self->{rawbank}[$i] . '""';
+        $line = substr($line, 0, $start) . $literal . substr($line, $end);
+    }
+
+    # Restore tagged masks as literal ''content''
+    while ($line =~ /$self->{taggedmaskre}/) {
+        my $i     = $1;
+        my $start = $-[0];
+        my $end   = $+[0];
+        my $literal = "''" . $self->{taggedbank}[$i] . "''";
+        $line = substr($line, 0, $start) . $literal . substr($line, $end);
+    }
+
+    # Restore mono masks as literal ``content``
+    while ($line =~ /$self->{monomaskre}/) {
+        my $i     = $1;
+        my $start = $-[0];
+        my $end   = $+[0];
+        my $literal = '``' . $self->{monobank}[$i] . '``';
+        $line = substr($line, 0, $start) . $literal . substr($line, $end);
+    }
+
+    # Links and macros are still expanded normally
+    while ($line =~ /$self->{linkmaskre}/) {
+        my $i     = $1;
+        my $start = $-[0];
+        my $end   = $+[0];
+        my ($label, $url) = @{ $self->{linkbank}[$i] };
+        my $tagged = get_tagged_link($label, $url);
+        $line = substr($line, 0, $start) . $tagged . substr($line, $end);
+    }
+
+    while ($line =~ /$self->{macromaskre}/) {
+        my $i     = $1;
+        my $start = $-[0];
+        my $end   = $+[0];
+        my $macro = $self->{macroman}->expand($self->{macrobank}[$i]);
+        $line = substr($line, 0, $start) . $macro . substr($line, $end);
+    }
+
+    return $line;
+}
+
 # ===========================================================================
 # TitleMaster – heading numbering & TOC
 # ===========================================================================
@@ -379,6 +442,7 @@ sub add {
     }
 
     my $lbl = $self->_get_label;
+    $self->{last_count_id} = ($kind eq 'numtitle') ? $self->{count_id} : '';
 
     # Build TOC entry
     my $indent = '  ' x ($level - 1);
@@ -393,6 +457,8 @@ sub add {
 
     return $lbl;
 }
+
+sub last_count_id { return $_[0]->{last_count_id} // '' }
 
 sub close {
     my ($self) = @_;
@@ -413,7 +479,7 @@ sub new {
         block_stack  => [],
         hold         => [],
         exclusive    => [qw(verb raw tagged comment)],
-        last         => 'para',
+        last         => '',
         _last_raw    => 0,
     }, $class;
 }
@@ -482,19 +548,28 @@ sub blockout {
     for my $line (@{ $self->{hold} }) {
         my $tag = $TAGS{$pfx . 'Line'} // '';
         if ($tag) {
-            push @out, $tag . $line;
+            $line = $tag . $line;
         }
-        else {
-            push @out, $line;
+        # indentverbblock: add 2-space prefix to verbatim lines
+        if ($blockname eq 'verb' && $rules{indentverbblock}) {
+            $line = '  ' . $line;
         }
+        push @out, $line;
     }
     $self->{hold} = [];
 
     my $tag_close = $TAGS{$pfx . 'Close'} // '';
     push @out, $tag_close if $tag_close;
 
-    $self->{last} = $blockname;
+    # Only update last if this block produced output (matching Python v2 behavior)
+    $self->{last} = $blockname if @out;
     return \@out;
+}
+
+sub last {
+    my ($self, $val) = @_;
+    $self->{last} = $val if defined $val;
+    return $self->{last};
 }
 
 sub holdadd {
@@ -541,28 +616,41 @@ sub new {
 }
 
 sub _parse_cell {
-    my ($self, $cell, $is_title) = @_;
-    $cell =~ s/^\s+|\s+$//g if $rules{tablecellstrip};
+    my ($self, $cell, $is_title, $cell_proc, $colspan) = @_;
+    $colspan //= 1;
 
-    # Determine alignment from leading/trailing spaces
+    # Detect alignment BEFORE stripping (based on leading/trailing spaces)
+    # 2+ leading AND 2+ trailing → Center
+    # 2+ leading only → Right
+    # Otherwise → no special alignment (default left)
     my $align = '';
     if ($cell =~ /^  / && $cell =~ /  $/) { $align = 'Center' }
-    elsif ($cell =~ /  $/)                 { $align = 'Right'  }
+    elsif ($cell =~ /^  /)                 { $align = 'Right'  }
+
+    $cell =~ s/^\s+|\s+$//g if $rules{tablecellstrip};
 
     my $open_tag  = $is_title ? ($TAGS{tableTitleCellOpen}  // '') : ($TAGS{tableCellOpen}  // '');
     my $close_tag = $is_title ? ($TAGS{tableTitleCellClose} // '') : ($TAGS{tableCellClose} // '');
 
-    if ($align && $rules{tablecellaligntype} eq 'cell') {
+    if ($align && $rules{tablecellaligntype} eq 'cell' && $cell =~ /\S/) {
         my $align_tag = $TAGS{"_tableCellAlign$align"} // '';
         $open_tag =~ s/~A~/$align_tag/;
     }
+    if ($colspan > 1 && $TAGS{_tableCellColSpan}) {
+        my $span_tag = $TAGS{_tableCellColSpan};
+        $span_tag =~ s/\\a/$colspan/g;
+        $open_tag =~ s/~S~/$span_tag/;
+    }
     $open_tag =~ s/~[AS]~//g;  # remove unused placeholders
+
+    # Apply text processing (escape, inline tags, unmask)
+    $cell = $cell_proc->($cell) if $cell_proc;
 
     return ($open_tag, $cell, $close_tag);
 }
 
 sub parse_row {
-    my ($self, $line) = @_;
+    my ($self, $line, $cell_proc) = @_;
     # Remove leading | and determine if border/align
     my $is_title  = 0;
     my $is_border = 0;
@@ -572,17 +660,30 @@ sub parse_row {
     if ($line =~ s/^\|\|//) { $is_title = 1 }
     else { $line =~ s/^\|// }
 
-    my @cells = split /\|/, $line, -1;
+    my @raw_cells = split /\|/, $line, -1;
+    # Remove trailing empty cell from trailing |
+    pop @raw_cells if @raw_cells && ($raw_cells[-1] =~ /^\s*$/);
+
+    # Merge consecutive TRULY empty cells (from ||) into colspan for preceding cell
+    # Whitespace-only cells (from | |) are NOT merged.
+    my @cells;     # [ [$content, $colspan], ... ]
+    for my $cell (@raw_cells) {
+        if ($cell eq '' && @cells) {
+            $cells[-1][1]++;   # increment colspan of preceding cell
+        } else {
+            push @cells, [$cell, 1];
+        }
+    }
 
     my $row_open  = $TAGS{tableRowOpen}  // '';
     my $row_close = $TAGS{tableRowClose} // '';
     my @out;
     push @out, $row_open if $row_open;
 
-    for my $cell (@cells) {
+    for my $cell_info (@cells) {
+        my ($cell, $colspan) = @$cell_info;
         $cell //= '';
-        $cell =~ s/^\s+|\s+$//g if $rules{tablecellstrip};
-        my ($co, $ctxt, $cc) = $self->_parse_cell($cell, $is_title);
+        my ($co, $ctxt, $cc) = $self->_parse_cell($cell, $is_title, $cell_proc, $colspan);
         push @out, "$co$ctxt$cc";
     }
 

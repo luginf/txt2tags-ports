@@ -69,7 +69,8 @@ use Text::Txt2tags::Constants qw($ESCCHAR %ESCAPES);
     is ref $compiled->[0][0], 'Regexp', 'first element is a Regexp';
 
     my $line = 'foo baz foo';
-    $line =~ s/$compiled->[0][0]/$compiled->[0][1]/g;
+    my $repl_fn = $compiled->[0][1];
+    $line =~ s/$compiled->[0][0]/$repl_fn->()/ge;
     is $line, 'bar baz bar', 'compiled filter replaces correctly';
 }
 

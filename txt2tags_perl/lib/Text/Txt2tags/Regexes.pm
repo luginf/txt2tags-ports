@@ -75,11 +75,11 @@ sub getRegexes {
 
         # Inline font marks – greedy, glued (no boundary spaces)
         fontMono         => qr/``([^\s](?:.*?[^\s])?`*)``/,
-        raw              => qr/""([^\s](?:.*?[^\s])?")""/ ,
+        raw              => qr/""([^\s](?:.*?[^\s])?"*)""/,
         tagged           => qr/''([^\s](?:.*?[^\s])?'*)''/ ,
         math             => qr/\$\$([^\s](?:.*?[^\s])?\$*)\$\$/,
         fontBold         => qr/\*\*([^\s](?:.*?[^\s])?\**)\*\*/,
-        fontItalic       => qr|//([^\s](?:.*?[^\s])?/*)//'|,
+        fontItalic       => qr|//([^\s](?:.*?[^\s])?/*)//|,
         fontUnderline    => qr/__([^\s](?:.*?[^\s])?_*)__/,
         fontStrike       => qr/--([^\s](?:.*?[^\s])?-*)--/,
 

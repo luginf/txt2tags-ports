@@ -17,6 +17,8 @@ use Text::Txt2tags::Constants qw(
     DFT_SLIDE_WEB_WIDTH DFT_SLIDE_WEB_HEIGHT
     DFT_SLIDE_PRINT_WIDTH DFT_SLIDE_PRINT_HEIGHT
 );
+use File::Basename ();
+use File::Spec     ();
 use Text::Txt2tags::Utils   qw(Error Debug Message Readfile dotted_spaces);
 use Text::Txt2tags::Regexes qw(getRegexes);
 use Text::Txt2tags::State   qw($VERBOSE $QUIET $DEBUG @RC_RAW @CMDLINE_RAW);
@@ -138,9 +140,10 @@ sub scan {
     unshift @buf, '';   # text starts at pos 1
 
     my @ref = (1, 4, 0);
-    if (!$buf[1] || $buf[1] !~ /\S/) {   # no header
+    # No header if: first line is blank OR starts with '%' (config/comment directive)
+    if (!$buf[1] || $buf[1] !~ /\S/ || $buf[1] =~ /^%/) {
         $ref[0] = 0;
-        $ref[1] = 2;
+        $ref[1] = ($buf[1] && $buf[1] =~ /^%/) ? 1 : 2;  # conf at line 1 for %-lines
     }
 
     my $rgx = getRegexes();
@@ -239,14 +242,41 @@ sub parse_line {
 }
 
 sub get_raw_config {
-    my ($self) = @_;
+    my ($self, $depth) = @_;
+    $depth //= 0;
     my @raw;
     my $n = $self->{first_line};
     for my $line (@{ $self->{lines} }) {
         $line //= '';
+        chomp $line;
         if ($line =~ /^%!/) {
             my ($target, $val, $key) = $self->parse_line($line);
-            if ($key) {
+            if ($key eq 'includeconf' && $depth < 5) {
+                # Resolve path relative to the current file
+                my $dir = '';
+                if ($self->{file_}) {
+                    $dir = File::Basename::dirname($self->{file_});
+                }
+                my $inc = ($dir && $dir ne '.')
+                    ? File::Spec->catfile($dir, $val)
+                    : $val;
+                if (-r $inc) {
+                    open my $fh, '<', $inc or next;
+                    my @inc_lines = <$fh>;
+                    close $fh;
+                    chomp @inc_lines;
+                    my $sub = Text::Txt2tags::ConfigLines->new(
+                        file_      => $inc,
+                        lines      => \@inc_lines,
+                        first_line => 1,
+                    );
+                    push @raw, @{ $sub->get_raw_config($depth + 1) };
+                }
+                else {
+                    Debug("includeconf: cannot read '$inc'", 1);
+                }
+            }
+            elsif ($key) {
                 push @raw, [$target, $key, $val];
                 Debug("config: target=$target key=$key val=$val", 1);
             }
@@ -343,6 +373,28 @@ sub get_target_raw {
     return \@ret;
 }
 
+# Parse a preproc/postproc value string "'pattern' 'replacement'" into
+# an arrayref [$pattern, $replacement].  Tokens may be single-quoted or
+# unquoted (splitting on whitespace).
+sub _parse_prepost_value {
+    my ($val) = @_;
+    my @tokens;
+    # Match up to 2 tokens: either 'quoted' or unquoted-word
+    while (length $val && @tokens < 2) {
+        $val =~ s/^\s+//;
+        if ($val =~ s/^'([^']*)'?//) {
+            push @tokens, $1;
+        }
+        elsif ($val =~ s/^(\S+)//) {
+            push @tokens, $1;
+        }
+        else {
+            last;
+        }
+    }
+    return [ $tokens[0] // '', $tokens[1] // '' ];
+}
+
 sub add {
     my ($self, $key, $val) = @_;
     $val //= '';
@@ -369,7 +421,13 @@ sub add {
     # Multi-value
     if (grep { $_ eq $key } @{ $self->{multi} }) {
         $self->{parsed}{$key} //= [];
-        push @{ $self->{parsed}{$key} }, $val;
+        # preproc/postproc/postvoodoo: parse value into [pattern, replacement]
+        if ($key eq 'preproc' || $key eq 'postproc' || $key eq 'postvoodoo') {
+            push @{ $self->{parsed}{$key} }, _parse_prepost_value($val);
+        }
+        else {
+            push @{ $self->{parsed}{$key} }, $val;
+        }
     }
     # Incremental
     elsif (grep { $_ eq $key } @{ $self->{incremental} }) {

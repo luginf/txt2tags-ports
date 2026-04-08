@@ -140,7 +140,11 @@ sub expandLineBreaks {
     my ($list) = @_;
     my @ret;
     for my $line (@$list) {
-        push @ret, split /\n/, $line, -1;
+        if (!defined $line || $line eq '') {
+            push @ret, '';   # preserve blank lines (split discards them)
+        } else {
+            push @ret, split /\n/, $line, -1;
+        }
     }
     return \@ret;
 }
@@ -149,6 +153,21 @@ sub expandLineBreaks {
 # Filter compilation
 # ---------------------------------------------------------------------------
 
+# Build a replacement closure from a template that may contain \1..\9 or $1..$9
+# backreferences.  The closure is called within s/$rgx/$fn->()/ge so that
+# $1,$2,... from the outer match are still alive when the closure runs.
+sub _make_repl_closure {
+    my ($template) = @_;
+    # Normalise Python-style \1 → $1
+    (my $tmpl = $template) =~ s/\\([1-9])/\$$1/g;
+    return sub {
+        # Snapshot the outer-match capture groups before any inner regex clobbers them
+        my @c = ($1,$2,$3,$4,$5,$6,$7,$8,$9);
+        (my $r = $tmpl) =~ s/\$([1-9])/defined $c[$1-1] ? $c[$1-1] : ''/ge;
+        $r
+    };
+}
+
 sub compile_filters {
     my ($filters, $errmsg) = @_;
     $errmsg //= 'Filter';
@@ -156,9 +175,9 @@ sub compile_filters {
     my @compiled;
     for my $pair (@$filters) {
         my ($patt, $repl) = @$pair;
-        my $rgx = eval { qr/$patt/ };
+        my $rgx = eval { qr/$patt/m };
         Error("$errmsg: '$patt': $@") if $@;
-        push @compiled, [$rgx, $repl];
+        push @compiled, [$rgx, _make_repl_closure($repl)];
     }
     return \@compiled;
 }
@@ -203,13 +222,45 @@ sub get_tagged_link {
         }
     }
 
-    # The \a in the tag is substituted: first \a → link, second \a → label
-    $label ||= $url;
+    # Add protocol to bare www.*/ftp.* URLs (guessed URLs)
+    my $orig_url = $url;
+    if (!$is_email && $url =~ /^(?:www[23]?|ftp)\./i) {
+        my $proto = ($url =~ /^ftp\./i) ? 'ftp://' : 'http://';
+        $url = $proto . $url;
+    }
+
+    # HTML-escape & in URLs (for HTML targets)
+    (my $url_esc = $url) =~ s/&/&amp;/g;
+
+    # Display: label if given, else original URL text (no added proto)
+    my $display;
+    if ($label) {
+        # Check if label is an image [img.ext] → expand to <IMG> tag
+        if ($label =~ /^\[([A-Za-z0-9_,.+%\$#\@!?+~\/-]+\.(?:png|jpe?g|gif|eps|bmp|svg))\]$/i) {
+            my $img_src = $1;
+            my $img_tag = $TAGS{img} // '';
+            if ($img_tag) {
+                my $align_tag = $rules{imgalignable} ? ($TAGS{_imgAlignCenter} // '') : '';
+                $img_tag =~ s/~A~/$align_tag/g;
+                my $first2 = 1;
+                $img_tag =~ s/\\a/$first2 ? do { $first2=0; $img_src } : $img_src/ge;
+                $display = $img_tag;
+            } else {
+                $display = $label;
+            }
+        } else {
+            (my $l = $label) =~ s/&/&amp;/g;
+            $display = $l;
+        }
+    } else {
+        (my $o = $orig_url) =~ s/&/&amp;/g;
+        $display = $o;
+    }
+
+    # The tag template has \a placeholders: first \a → URL, second \a → display text
     my $result = $open_tag;
     my $first  = 1;
-    $result =~ s/\\a/$first ? do { $first = 0; $url   } : $label/ge
-        if !$label || $label eq $url;
-    $result =~ s/\\a/$first ? do { $first = 0; $label } : $url/ge;
+    $result =~ s/\\a/$first ? do { $first = 0; $url_esc } : $display/ge;
 
     return $result;
 }
@@ -280,9 +331,9 @@ sub post_voodoo {
     my $subject = join "\n", @$lines;
     my $spells  = compile_filters($config->{postvoodoo}, $loser1);
     for my $pair (@$spells) {
-        my ($rgx, $repl) = @$pair;
-        eval { $subject =~ s/$rgx/$repl/g };
-        Error("$loser2: '$repl'") if $@;
+        my ($rgx, $repl_fn) = @$pair;
+        eval { $subject =~ s/$rgx/$repl_fn->()/ge };
+        Error($loser2) if $@;
     }
     return [ split /\n/, $subject, -1 ];
 }
@@ -294,6 +345,13 @@ sub post_voodoo {
 sub finish_him {
     my ($outlist, $config) = @_;
     my $outfile = $config->{outfile};
+    if ($DEBUG) {
+        my $lim2 = $#$outlist < 15 ? $#$outlist : 15;
+        print STDERR "DEBUG finish_him ENTRY: outlist has ", scalar(@$outlist), " lines\n";
+        for my $i (0..$lim2) {
+            print STDERR "  entry[$i]: <<$outlist->[$i]>>\n";
+        }
+    }
     $outlist = unmaskEscapeChar($outlist);
     $outlist = expandLineBreaks($outlist);
 
@@ -303,9 +361,9 @@ sub finish_him {
         my @post;
         for my $line (@$outlist) {
             for my $pair (@$filters) {
-                my ($rgx, $repl) = @$pair;
-                eval { $line =~ s/$rgx/$repl/g };
-                Error("Invalid PostProc filter replacement: '$repl'") if $@;
+                my ($rgx, $repl_fn) = @$pair;
+                eval { $line =~ s/$rgx/$repl_fn->()/ge };
+                Error('Invalid PostProc filter replacement') if $@;
             }
             push @post, $line;
         }
@@ -317,6 +375,13 @@ sub finish_him {
     }
 
     # Save to file_dict (global via State)
+    if ($DEBUG) {
+        my $lim = $#$outlist < 15 ? $#$outlist : 15;
+        print STDERR "DEBUG finish_him: outlist has ", scalar(@$outlist), " lines\n";
+        for my $i (0..$lim) {
+            print STDERR "  [$i]: <<$outlist->[$i]>>\n";
+        }
+    }
     $Text::Txt2tags::State::file_dict{$outfile} = $outlist
         unless $config->{target} =~ /^csv/;
 
@@ -466,23 +531,7 @@ sub toc_formatter {
 
 # Minimal built-in header templates (subset of original)
 my %HEADER_TEMPLATE = (
-    html => <<'END_HTML',
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
-<HTML>
-<HEAD>
-<META NAME="generator" CONTENT="http://txt2tags.org">
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=%(ENCODING)s">
-<LINK REL="stylesheet" TYPE="text/css" HREF="%(STYLE)s">
-<TITLE>%(HEADER1)s</TITLE>
-</HEAD>
-<BODY>
-
-<DIV CLASS="header" ID="header">
-<H1>%(HEADER1)s</H1>
-<H2>%(HEADER2)s</H2>
-<H3>%(HEADER3)s</H3>
-</DIV>
-END_HTML
+    html => 'DYNAMIC_HTML',
     xhtml => <<'END_XHTML',
 <?xml version="1.0" encoding="%(ENCODING)s"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
@@ -545,18 +594,56 @@ $HEADER_TEMPLATE{xhtmls} = $HEADER_TEMPLATE{xhtml};
 $HEADER_TEMPLATE{htmls}  = $HEADER_TEMPLATE{html};
 $HEADER_TEMPLATE{wp}     = '';
 
+sub _doHeader_html {
+    my ($headers, $config) = @_;
+
+    my ($h1, $h2, $h3) = map { $_ // '' } @{$headers}[0, 1, 2];
+    my $enc   = get_encoding_string($config->{encoding} // '', 'html') // '';
+    my $style = ($config->{style} && @{ $config->{style} })
+                    ? $config->{style}[0] : '';
+
+    my @head;
+    push @head, '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">';
+    push @head, '<HTML>';
+    push @head, '<HEAD>';
+    push @head, '<META NAME="generator" CONTENT="http://txt2tags.org">';
+    push @head, "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=$enc\">"
+        if $enc;
+    push @head, "<LINK REL=\"stylesheet\" TYPE=\"text/css\" HREF=\"$style\">"
+        if $style;
+    # v2 format: </HEAD><BODY on same line, BGCOLOR/TEXT attributes
+    push @head, '</HEAD><BODY BGCOLOR="white" TEXT="black">';
+    push @head, '<CENTER>';
+    push @head, "<H1>$h1</H1>" if $h1;
+    push @head, "<H2>$h2</H2>" if $h2;
+    push @head, "<H3>$h3</H3>" if $h3;
+    push @head, '</CENTER>';
+    push @head, '';   # trailing blank matching Python v2 template
+
+    return @head;
+}
+
 sub doHeader {
     my ($headers, $config) = @_;
     return $config->{fullBody} unless $config->{headers};
 
     $headers //= [];
-    my $empty_headers = !@$headers;
-    $headers = ['', '', ''] if $empty_headers;
+    $headers = ['', '', ''] unless @$headers;
 
     my $target = $config->{target};
     my $tmpl_str = $HEADER_TEMPLATE{$target} // '';
 
-    # Build substitution data
+    # HTML (and aliases) use the v2-compatible generator
+    if ($tmpl_str eq 'DYNAMIC_HTML') {
+        my @head  = _doHeader_html($headers, $config);
+        my @body  = @{ $config->{fullBody} // [] };
+        my @eod;
+        if ($TAGS{EOD}) { push @eod, $TAGS{EOD} }
+
+        return [@head, @body, @eod];
+    }
+
+    # Build substitution data for template-based targets
     my %head_data = (
         ENCODING => get_encoding_string($config->{encoding} // '', $target) // '',
         STYLE    => '',
