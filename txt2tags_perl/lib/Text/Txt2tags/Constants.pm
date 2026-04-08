@@ -20,11 +20,11 @@ use constant HTML_LOWER  => 0;  # use lowercased HTML tags?
 # ---------------------------------------------------------------------------
 # Program information
 # ---------------------------------------------------------------------------
-our $MY_URL      = 'http://txt2tags.org';
+our $MY_URL      = 'https://github.com/luginf/txt2tags-ports/';
 our $MY_NAME     = 'txt2tags';
-our $MY_EMAIL    = 'verde@aurelio.net';
+our $MY_EMAIL    = 'verde@aurelio';
 our $MY_REVISION = '$Revision$';
-our $MY_VERSION  = '2.6';
+our $MY_VERSION  = '2.8';
 
 # Strip non-digits from revision
 (my $rev_num = $MY_REVISION) =~ s/\D//g;

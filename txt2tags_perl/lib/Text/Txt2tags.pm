@@ -107,7 +107,7 @@ This module mirrors the Python module structure:
 
 =head1 AUTHOR
 
-Port by luginf.  Original txt2tags by Aurelio Marinho Jargas <verde@aurelio.net>.
+Port by luginf.  Original txt2tags by Aurelio Marinho Jargas <verde@aurelio>.
 
 =head1 LICENSE
 

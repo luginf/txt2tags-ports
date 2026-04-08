@@ -623,6 +623,40 @@ sub _doHeader_html {
     return @head;
 }
 
+sub _build_head_data {
+    my ($headers, $config) = @_;
+    my $target = $config->{target};
+    my %d = (
+        ENCODING => $config->{encoding} // '',
+        STYLE    => '',
+        HEADER1  => $headers->[0] // '',
+        HEADER2  => $headers->[1] // '',
+        HEADER3  => $headers->[2] // '',
+        BODY     => join("\n", @{ $config->{fullBody} // [] }),
+    );
+    if ($config->{style} && @{ $config->{style} }) {
+        $d{STYLE} = $config->{style}[0];
+    }
+    return %d;
+}
+
+sub _apply_tmpl {
+    my ($tmpl_str, %head_data) = @_;
+    my @tmpl_lines = split /\n/, $tmpl_str, -1;
+    my @out;
+    for my $line (@tmpl_lines) {
+        if ($line =~ /%\(([A-Z0-9]+)\)s/) {
+            my $key = $1;
+            if (!$head_data{$key}) {
+                next unless $line =~ /%\([A-Z0-9]+\)s.*%\([A-Z0-9]+\)s/;
+            }
+        }
+        $line =~ s/%\((\w+)\)s/$head_data{$1} \/\/ ''/ge;
+        push @out, $line;
+    }
+    return \@out;
+}
+
 sub doHeader {
     my ($headers, $config) = @_;
     return $config->{fullBody} unless $config->{headers};
@@ -631,6 +665,21 @@ sub doHeader {
     $headers = ['', '', ''] unless @$headers;
 
     my $target = $config->{target};
+
+    # User-provided template file (-T / --template)
+    if ($config->{template}) {
+        my $tbase = $config->{template};
+        my $found;
+        for my $name ("$tbase.$target", $tbase) {
+            if (-f $name) { $found = $name; last }
+        }
+        Error("Cannot find template file: $tbase") unless $found;
+        my $lines = Readfile($found, 1);
+        my $tmpl_str = join("\n", @$lines);
+        my %head_data = _build_head_data($headers, $config);
+        return _apply_tmpl($tmpl_str, %head_data);
+    }
+
     my $tmpl_str = $HEADER_TEMPLATE{$target} // '';
 
     # HTML (and aliases) use the v2-compatible generator
@@ -643,50 +692,20 @@ sub doHeader {
         return [@head, @body, @eod];
     }
 
-    # Build substitution data for template-based targets
-    my %head_data = (
-        ENCODING => get_encoding_string($config->{encoding} // '', $target) // '',
-        STYLE    => '',
-        HEADER1  => $headers->[0] // '',
-        HEADER2  => $headers->[1] // '',
-        HEADER3  => $headers->[2] // '',
-        BODY     => join("\n", @{ $config->{fullBody} // [] }),
-    );
-
-    # Style
-    if ($config->{style} && @{ $config->{style} }) {
-        $head_data{STYLE} = $config->{style}[0];
-    }
-
     # For rst/md/adoc: no template, just return body
     if (!$tmpl_str) {
         return $config->{fullBody};
     }
 
-    # Append body + EOD
+    # Append body + EOD to built-in template
     $tmpl_str .= "%(BODY)s\n";
     if ($TAGS{EOD}) {
         (my $eod = $TAGS{EOD}) =~ s/%/%%/g;
         $tmpl_str .= "$eod\n";
     }
 
-    # Remove lines whose key is empty
-    my @tmpl_lines = split /\n/, $tmpl_str, -1;
-    my @out_lines;
-    for my $line (@tmpl_lines) {
-        if ($line =~ /%\(([A-Z0-9]+)\)s/) {
-            my $key = $1;
-            if (!$head_data{$key}) {
-                # skip line if it has no other substitution key
-                next unless $line =~ /%\([A-Z0-9]+\)s.*%\([A-Z0-9]+\)s/;
-            }
-        }
-        # Perform substitution
-        $line =~ s/%\((\w+)\)s/$head_data{$1} \/\/ ''/ge;
-        push @out_lines, $line;
-    }
-
-    return \@out_lines;
+    my %head_data = _build_head_data($headers, $config);
+    return _apply_tmpl($tmpl_str, %head_data);
 }
 
 # ---------------------------------------------------------------------------

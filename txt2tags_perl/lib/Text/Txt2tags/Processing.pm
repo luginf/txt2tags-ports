@@ -42,6 +42,7 @@ BEGIN {
 # ===========================================================================
 
 package Text::Txt2tags::MacroMaster;
+use POSIX qw(strftime);
 our (%CONF, %MACROS);
 BEGIN {
     *CONF   = \%Text::Txt2tags::State::CONF;
@@ -78,7 +79,9 @@ sub _expand_macro {
     }
     elsif ($name eq 'mtime') {
         my $f = $fmt || $MACROS{mtime} || '%Y%m%d';
-        return strftime($f, localtime);
+        my $infile = $config->{currentsourcefile} // $config->{sourcefile} // $config->{infile} // '';
+        my @t = ($infile && -f $infile) ? localtime((stat $infile)[9]) : localtime;
+        return strftime($f, @t);
     }
     elsif ($name =~ /^(infile|currentfile|outfile)$/) {
         return $config->{$name} // '';

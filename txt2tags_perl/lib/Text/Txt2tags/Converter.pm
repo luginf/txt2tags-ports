@@ -750,9 +750,11 @@ sub convert_this_files {
 
         $myconf->{fullBody} = [@$target_toc, @$target_body, @$target_foot];
 
-        # Header
+        # Header – expand macros in header lines (%%date, %%mtime, etc.)
         Message('Composing target Headers', 1);
-        my $outlist = doHeader($source_head, $myconf);
+        my $macro = Text::Txt2tags::MacroMaster->new(config => $myconf);
+        my @expanded_head = map { $macro->expand($_ // '') } @{$source_head}[0..2];
+        my $outlist = doHeader(\@expanded_head, $myconf);
 
         if ($myconf->{outfile} && $myconf->{outfile} eq $MODULEOUT) {
             return (finish_him($outlist, $myconf), $myconf);

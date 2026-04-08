@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     NAME             => 'Text::Txt2tags',
-    AUTHOR           => 'luginf <verde@aurelio.net>',
+    AUTHOR           => 'luginf',
     VERSION_FROM     => 'lib/Text/Txt2tags.pm',
     ABSTRACT_FROM    => 'lib/Text/Txt2tags.pm',
     LICENSE          => 'bsd',

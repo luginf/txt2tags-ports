@@ -45,7 +45,7 @@ GetOptions(
     'width=i'           => \$cli_opts{width},
     'height=i'          => \$cli_opts{height},
     'config-file=s'     => \$cli_opts{'config-file'},
-    'template=s'        => \$cli_opts{template},
+    'template|T=s'      => \$cli_opts{template},
     'fix-path'          => \$cli_opts{'fix-path'},
     'embed-images'      => \$cli_opts{'embed-images'},
     'quiet|q'           => \$cli_opts{quiet},
