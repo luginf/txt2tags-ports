@@ -175,6 +175,9 @@ sub compile_filters {
     my @compiled;
     for my $pair (@$filters) {
         my ($patt, $repl) = @$pair;
+        # Perl 5.26+ rejects unescaped { that are not valid quantifiers
+        # ({n}, {n,}, {n,m}).  Python's re allows them, so auto-escape here.
+        $patt =~ s/\{(?!\d+,?\d*\})/\\{/g;
         my $rgx = eval { qr/$patt/m };
         Error("$errmsg: '$patt': $@") if $@;
         push @compiled, [$rgx, _make_repl_closure($repl)];
@@ -635,7 +638,10 @@ sub _build_head_data {
         BODY     => join("\n", @{ $config->{fullBody} // [] }),
     );
     if ($config->{style} && @{ $config->{style} }) {
-        $d{STYLE} = $config->{style}[0];
+        my $sty = $config->{style}[0];
+        # LaTeX requires \usepackage{name} without the .sty extension
+        $sty =~ s/\.sty$//i if $target =~ /^tex/i;
+        $d{STYLE} = $sty;
     }
     return %d;
 }

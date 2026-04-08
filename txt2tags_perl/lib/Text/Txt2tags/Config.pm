@@ -379,11 +379,21 @@ sub get_target_raw {
 sub _parse_prepost_value {
     my ($val) = @_;
     my @tokens;
-    # Match up to 2 tokens: either 'quoted' or unquoted-word
+    # Match up to 2 tokens: "double quoted", 'single quoted', or unquoted-word
+    # Mirrors Python's _parse_prepost regex.
     while (length $val && @tokens < 2) {
         $val =~ s/^\s+//;
-        if ($val =~ s/^'([^']*)'?//) {
+        if ($val =~ s/^"([^"]*)"?//) {
             push @tokens, $1;
+        }
+        elsif ($val =~ s/^'([^']*)'?//) {
+            push @tokens, $1;
+        }
+        elsif (@tokens == 1) {
+            # Last token: take everything remaining (like Python's `(.*)`)
+            $val =~ s/\s+$//;
+            push @tokens, $val;
+            last;
         }
         elsif ($val =~ s/^(\S+)//) {
             push @tokens, $1;
