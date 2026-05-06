@@ -162,7 +162,7 @@ if USE_I18N:
         # If your locale dir is different, change it here
         cat = gettext.Catalog("txt2tags", localedir="/usr/share/locale/")
         _ = cat.gettext
-    except:
+    except Exception:
 
         def _(x):
             return x
@@ -395,7 +395,7 @@ for target in TARGETS_LIST:
         )
         try:
             TARGET_TYPES[getattr(targets, target).TYPE][1].append(target)
-        except:
+        except (KeyError, AttributeError):
             OTHER_TARGETS.append(target)
     else:
         NOT_LOADED.append(target)
@@ -3356,7 +3356,7 @@ def getTags(config):
 
     # Make the HTML -> XHTML inheritance
     xhtml = alltags["html"].copy()
-    for key in list(xhtml.keys()):
+    for key in xhtml:
         xhtml[key] = xhtml[key].lower()
     # Some like HTML tags as lowercase, some don't... (headers out)
     if HTML_LOWER:
@@ -3398,7 +3398,7 @@ def getTags(config):
 
     for key in keys:
         tags[key] = ""  # create empty keys
-    for key in list(target_tags.keys()):
+    for key in target_tags:
         tags[key] = maskEscapeChar(target_tags[key])  # populate
 
     # Map strong line to pagebreak
@@ -4326,7 +4326,7 @@ def getRegexes():
 
     # %%macroname [ (formatting) ]
     bank["macros"] = re.compile(
-        r"%%%%(?P<name>%s)\b(\((?P<fmt>.*?)\))?" % ("|".join(list(MACROS.keys()))), re.I
+        r"%%%%(?P<name>%s)\b(\((?P<fmt>.*?)\))?" % ("|".join(MACROS)), re.I
     )
 
     # %%TOC special macro for TOC positioning
@@ -4716,7 +4716,7 @@ def aa_image(image):
     for lin in image:
         art_line = ""
         for pixel in lin:
-            art_line = art_line + art_table[pixel / 32]
+            art_line = art_line + art_table[pixel // 32]
         art_image.append(art_line)
     return art_image
 
@@ -4824,10 +4824,10 @@ class TextWrapperCJK(textwrap.TextWrapper):
 
 
 def aa_center(txt, width, web=False):
-    n_before = (width - aa_lencjk(txt, web)) / 2
+    n_before = (width - aa_lencjk(txt, web)) // 2
     n_after = width - aa_lencjk(txt, web) - n_before
 
-    return " " * int(n_before) + txt + " " * int(n_after)
+    return " " * n_before + txt + " " * n_after
 
 
 # The Spreadsheet library
@@ -4869,7 +4869,7 @@ def spreadsheet(data, markup, grid):
     for j, row in enumerate(data):
         for i, el in enumerate(row[0]):
             ind = (
-                ascii_uppercase[int(i / 26) - 1].replace("Z", "")
+                ascii_uppercase[i // 26 - 1].replace("Z", "")
                 + ascii_uppercase[i % 26]
                 + str(j + 1)
             )
@@ -4878,7 +4878,7 @@ def spreadsheet(data, markup, grid):
     for j, row in enumerate(data):
         for i, el in enumerate(row[0]):
             ind = (
-                ascii_uppercase[int(i / 26) - 1].replace("Z", "")
+                ascii_uppercase[i // 26 - 1].replace("Z", "")
                 + ascii_uppercase[i % 26]
                 + str(j + 1)
             )
@@ -4898,7 +4898,7 @@ def spreadsheet(data, markup, grid):
     if grid:
         h = [
             (
-                ascii_uppercase[int(i / 26) - 1].replace("Z", "")
+                ascii_uppercase[i // 26 - 1].replace("Z", "")
                 + ascii_uppercase[i % 26]
             )
             for i in range(n)
@@ -4972,7 +4972,7 @@ def parse_convert_table(table, tableable, target):
 def math_print(target, txt):
     try:
         import sympy
-    except:
+    except ImportError:
         Error(_("$$math$$: You need SymPy to use math formula"))
     if sympy.__version__ < "0.7.4":
         Error(_("$$math$$: You need SymPy 0.7.4 or > to use math formula"))
@@ -5016,7 +5016,7 @@ def getTraceback():
 
         etype, value, tb = sys.exc_info()
         return "".join(format_exception(etype, value, tb))
-    except:
+    except Exception:
         pass
 
 
@@ -5064,7 +5064,7 @@ def Readfile(file_path, remove_linebreaks=0, ignore_error=0):
     if file_path == "-":
         try:
             data = sys.stdin.readlines()
-        except:
+        except (IOError, OSError):
             if not ignore_error:
                 Error(_("You must feed me with data on STDIN!"))
 
@@ -5081,17 +5081,17 @@ def Readfile(file_path, remove_linebreaks=0, ignore_error=0):
             data = [line.decode("utf-8") for line in f.readlines()]
 
             f.close()
-        except:
+        except Exception:
             if not ignore_error:
                 Error(_("Cannot read file:") + " " + file_path)
 
     # local file
     else:
         try:
-            f = open(file_path)
+            f = open(file_path, encoding="utf-8")
             data = f.readlines()
             f.close()
-        except:
+        except (IOError, OSError):
             if not ignore_error:
                 Error(_("Cannot read file:") + " " + file_path)
 
@@ -5105,7 +5105,7 @@ def Readfile(file_path, remove_linebreaks=0, ignore_error=0):
 def Savefile(file_path, contents):
     try:
         f = open(file_path, "wb")
-    except:
+    except (IOError, OSError):
         Error(_("Cannot open file for writing:") + " " + file_path)
 
     if isinstance(contents, list):
@@ -5120,7 +5120,7 @@ def Savefile(file_path, contents):
 
 
 def showdic(dic):
-    for k in list(dic.keys()):
+    for k in dic:
         print("%15s : %s" % (k, dic[k]))
 
 
@@ -5256,7 +5256,7 @@ class CommandLine:
     def _compose_short_opts(self):
         "Returns a string like 'hVt:o' with all short options/flags"
         ret = []
-        for opt in list(self.short_long.keys()):
+        for opt in self.short_long:
             long_ = self.short_long[opt]
             if long_ in self.all_options:  # is flag or option?
                 opt = opt + ":"  # option: have param
@@ -5398,7 +5398,7 @@ class CommandLine:
             args.append("-t " + cfg["target"])
             del cfg["target"]
         # Add other options
-        for key in list(cfg.keys()):
+        for key in cfg:
             if key not in valid_opts:
                 continue  # may be a %!setting
             if key == "outfile" or key == "infile":
@@ -5858,7 +5858,7 @@ class ConfigMaster:
     def _get_off(self):
         "Turns OFF all the config/options/flags"
         off = {}
-        for key in list(self.defaults.keys()):
+        for key in self.defaults:
             kind = type(self.defaults[key])
             if kind == type(9):
                 off[key] = 0
@@ -6066,7 +6066,7 @@ class ConfigMaster:
             try:
                 # Peace for ASCII 7-bits only
                 config["chars"] = config["chars"].encode()
-            except:
+            except (UnicodeEncodeError, AttributeError):
                 if (
                     config["encoding"].lower() == "utf-8"
                     and locale.getpreferredencoding() != "UTF-8"
@@ -6222,12 +6222,12 @@ class ConfigMaster:
         if target == "db":
             try:
                 import sqlite3
-            except:
+            except ImportError:
                 Error("No sqlite3 module")
             global DB, DBC
             try:
                 os.remove(config["outfile"])
-            except:
+            except OSError:
                 pass
             DB = sqlite3.connect(config["outfile"])
             DBC = DB.cursor()
@@ -6242,7 +6242,7 @@ class ConfigMaster:
             else:
                 self.add(key, value)
         Message(
-            _("Added the following keys: %s") % ", ".join(list(self.parsed.keys())), 2
+            _("Added the following keys: %s") % ", ".join(self.parsed), 2
         )
         return self.parsed.copy()
 
@@ -6543,19 +6543,19 @@ class MaskMaster:
 
             try:
                 t = regex["tagged"].search(line).start()
-            except:
+            except AttributeError:
                 pass
             try:
                 r = regex["raw"].search(line).start()
-            except:
+            except AttributeError:
                 pass
             try:
                 v = regex["fontMono"].search(line).start()
-            except:
+            except AttributeError:
                 pass
             try:
                 m = regex["math"].search(line).start()
-            except:
+            except AttributeError:
                 pass
 
             # Protect tagged text
@@ -6704,7 +6704,7 @@ class MaskMaster:
                 midline_end = line[middle][m.end() :]
             if TARGET == "aat":
                 if len(mathp) > 1:
-                    middle = len(mathp) / 2
+                    middle = len(mathp) // 2
                     if not isinstance(line, list):
                         line = (
                             [" " * len(line_start) + l for l in mathp[:middle]]
@@ -6714,13 +6714,13 @@ class MaskMaster:
                     else:
                         diff_mask = len(mask) - len(mathp[middle])
                         diff_line = len(line) - len(mathp)
-                        up_lines = [""] * (abs(diff_line) / 2)
-                        down_lines = [""] * (abs(diff_line) - (abs(diff_line) / 2))
+                        up_lines = [""] * (abs(diff_line) // 2)
+                        down_lines = [""] * (abs(diff_line) - (abs(diff_line) // 2))
                         if diff_line < 0:
                             line = up_lines + line + down_lines
                         else:
                             mathp = up_lines + mathp + down_lines
-                        middle = len(mathp) / 2
+                        middle = len(mathp) // 2
                         if diff_mask < 0:
                             line = (
                                 [
@@ -7965,7 +7965,7 @@ class BlockMaster:
                 and re.match(r"^\s*<center>.*</center>\s*$", lines[0])
             ):
                 result = [lines[0]]
-        except:
+        except (IndexError, AttributeError):
             pass
 
         return result
@@ -8118,7 +8118,7 @@ class BlockMaster:
                     },
                 )
                 return ["%center", '%newimage "' + t_name + '"']
-            except:
+            except Exception:
                 return ['%font "mono"'] + aa_t + [""]
 
         if TARGET == "db" and self.tableparser.rows:
@@ -8588,12 +8588,12 @@ class MacroMaster:
                         # >>>
                         #
                         from urllib.request import urlopen
-                        from email.Utils import parsedate
+                        from email.utils import parsedate
 
                         f = urlopen(self.infile)
                         mtime_rfc2822 = f.info().get("last-modified")
                         fdate = parsedate(mtime_rfc2822)
-                    except:
+                    except Exception:
                         # If mtime cannot be found, defaults to current date
                         fdate = self.currdate
                 else:
@@ -8772,7 +8772,7 @@ def post_voodoo(lines, config):
     for magic, words in spells:
         try:
             subject = magic.sub(words, subject)
-        except:
+        except re.error:
             Error("%s: '%s'" % (loser2, words))
 
     return subject.split("\n")
@@ -8795,7 +8795,7 @@ def finish_him(outlist, config):
             for rgx, repl in filters:
                 try:
                     line = rgx.sub(repl, line)
-                except:
+                except re.error:
                     Error("%s: '%s'" % (errmsg, repl))
             postoutlist.append(line)
         outlist = postoutlist[:]
@@ -8834,7 +8834,7 @@ def finish_him(outlist, config):
     if config["target"] == "db":
         DBC.close()
         if outfile in [MODULEOUT, STDOUT]:
-            outlist = [open(config["outfile"]).read()]
+            outlist = [open(config["outfile"], encoding="utf-8").read()]
             os.remove(config["outfile"])
 
     outlist = []
@@ -8849,8 +8849,8 @@ def finish_him(outlist, config):
             return outlist, config
         else:
             for line in outlist:
-                if isinstance(line, str):
-                    line = line.encode("utf-8")
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
                 print(line)
     else:
         if not config["target"] == "db":
@@ -9045,7 +9045,7 @@ def doHeader(headers, config):
     config["stylepath_out"] = fix_css_out_path(config)
 
     # Populate head_data with config info
-    for key in list(head_data.keys()):
+    for key in head_data:
         val = config.get(key.lower())
         if key == "STYLE" and "html" in target:
             val = config.get("stylepath_out") or []
@@ -9183,7 +9183,7 @@ def doHeader(headers, config):
     # If found, remove the reference
     # If there isn't any other key reference on the same line, remove it
     # TODO loop by template line > key
-    for key in list(head_data.keys()):
+    for key in head_data:
         if head_data.get(key):
             continue
         for line in template:
@@ -9239,7 +9239,7 @@ def doHeader(headers, config):
                 )
                 # Style now is content, needs escaping (tex)
                 # css = maskEscapeChar(css)
-            except:
+            except Exception:
                 Error(_("CSS include failed for %s") % cssfile)
             # Insert this CSS file contents on the template
             template = re.sub("(?i)(</HEAD>)", css + r"\1", template)
@@ -9365,7 +9365,7 @@ def doEscape(target, txt):
         if enc:
             try:
                 txt = txt.decode(enc)
-            except:
+            except (UnicodeDecodeError, AttributeError):
                 Error('Problem decoding line "' % txt + '"')
             txt = txt.encode("cp1252", "backslashreplace")
             # escape ANSI codes above ascii range
@@ -9438,7 +9438,7 @@ def compile_filters(filters, errmsg="Filter"):
             patt, repl = filters[i]
             try:
                 rgx = re.compile(patt)
-            except:
+            except re.error:
                 Error("%s: '%s'" % (errmsg, patt))
             filters[i] = (rgx, repl)
     return filters
@@ -9718,7 +9718,7 @@ def get_encoding_string(enc, target):
     # Apply translation table
     try:
         enc = translate[target][enc.lower()]
-    except:
+    except KeyError:
         pass
     return enc
 
@@ -9821,7 +9821,7 @@ def convert_this_files(configs):
                 for line in source_body:
                     decode_body.append(line.decode("utf-8"))
                 source_head, source_body = decode_head, decode_body
-            except:
+            except (UnicodeDecodeError, AttributeError):
                 myconf["encoding"] = "not_utf-8"
                 myconf = ConfigMaster().sanity(myconf)
 
@@ -9860,7 +9860,7 @@ def convert_this_files(configs):
             else:
                 target_body = target_body + spaces + [end_line]
             if myconf["qa"]:
-                n_before = (myconf["height"] - 23) / 2
+                n_before = (myconf["height"] - 23) // 2
                 n_after = myconf["height"] - 23 - n_before
                 head = aa_slide(_("Q&A"), AA["bar2"], myconf["width"], myconf["web"])
                 end_qa = aa_line(AA["bar2"], myconf["width"])
@@ -9871,7 +9871,7 @@ def convert_this_files(configs):
                         target_body
                         + head
                         + [""] * n_before
-                        + [(myconf["width"] - 23) / 2 * " " + line for line in AA_QA]
+                        + [(myconf["width"] - 23) // 2 * " " + line for line in AA_QA]
                         + [""] * n_after
                         + [end_qa]
                     )
@@ -10042,7 +10042,7 @@ def getImageInfo(filename):
         else:  # Not a supported image format
             f.close()
             Error("Cannot embed image " + filename + ". Unsupported format.")
-    except:
+    except (IOError, OSError):
         Error("Cannot embed image " + filename + ". Unable to open file.")
 
 
@@ -10088,7 +10088,7 @@ def embedImage(filename):
             line = line + str(binascii.hexlify(filein.read()))
             filein.close()
             return line
-        except:
+        except (IOError, OSError):
             Error("Unable to embed image: " + filename)
 
     elif TARGET == "aat":
@@ -10316,7 +10316,7 @@ def convert(bodylines, config, firstlinenr=1):
             for rgx, repl in pre_filter:
                 try:
                     line = rgx.sub(repl, line)
-                except:
+                except re.error:
                     Error("%s: '%s'" % (errmsg, repl))
 
         line = maskEscapeChar(line)  # protect \ char
@@ -10579,7 +10579,7 @@ def convert(bodylines, config, firstlinenr=1):
             elif key == "db":
                 try:
                     import sqlite3
-                except:
+                except ImportError:
                     Error("No sqlite3 module")
 
                 # Handle options and arguments
@@ -10844,7 +10844,7 @@ def convert(bodylines, config, firstlinenr=1):
             or regex["deflist"].search(line)
         ):
             listindent = BLOCK.prop("indent")
-            listids = "".join(list(LISTNAMES.keys()))
+            listids = "".join(LISTNAMES)
             m = re.match("^( *)([%s]) " % listids, line)
             listitemindent = m.group(1)
             listtype = m.group(2)
@@ -11102,7 +11102,7 @@ class Gui:
         target = [x for x in TARGETS if TARGET_NAMES[x] == name]
         try:
             key = target[0]
-        except:
+        except IndexError:
             key = ""
         self.target = self.setvar(key)
 
@@ -11351,7 +11351,7 @@ class Gui:
 ##############################################################################
 
 
-def exec_command_line(user_cmdline=[]):
+def exec_command_line(user_cmdline=None):
     global CMDLINE_RAW, RC_RAW, DEBUG, VERBOSE, QUIET, GUI, Error
 
     # Extract command line data
@@ -11409,7 +11409,7 @@ def exec_command_line(user_cmdline=[]):
         try:
             load_GUI_resources()
             Debug("GUI resources OK (Tk module is installed)")
-        except:
+        except ImportError:
             Error(
                 _("Tkinter module not found, so GUI is not available, use CLI instead.")
             )
@@ -11417,7 +11417,7 @@ def exec_command_line(user_cmdline=[]):
             winbox = Gui()
             Debug("GUI display OK")
             GUI = 1
-        except:
+        except Exception:
             Debug("GUI Error: no DISPLAY")
             GUI = 0
 
@@ -11446,7 +11446,7 @@ def exec_command_line(user_cmdline=[]):
         else:
             try:
                 gui_conf = infiles_config[0][0]
-            except:
+            except (IndexError, KeyError):
                 gui_conf = {}
 
         # Sanity is needed to set outfile and other things
@@ -11487,7 +11487,7 @@ if __name__ == "__main__":
         sys.exit(1)
     except SystemExit:
         pass
-    except:
+    except Exception:
         sys.stderr.write(getUnknownErrorMessage())
         sys.stderr.flush()
         sys.exit(1)
