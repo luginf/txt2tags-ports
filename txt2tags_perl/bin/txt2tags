@@ -27,6 +27,7 @@ use Text::Txt2tags::Converter qw(get_infiles_config convert_this_files process_s
 # Parse command line
 # ---------------------------------------------------------------------------
 
+my @argv_orig = @ARGV;  # capture before GetOptions consumes them
 my %cli_opts;
 GetOptions(
     'target|t=s'        => \$cli_opts{target},
@@ -141,6 +142,8 @@ if ($rc_path && -f $rc_path) {
     if ($VERBOSE) {
         push @CMDLINE_RAW, ['all', 'verbose', ''] for 1 .. $VERBOSE;
     }
+    # record original argv for %%cmdline macro
+    push @CMDLINE_RAW, ['all', 'realcmdline', \@argv_orig];
 }
 
 # ---- Collect infiles from remaining ARGV ---------------------------------

@@ -158,12 +158,18 @@ sub expandLineBreaks {
 # $1,$2,... from the outer match are still alive when the closure runs.
 sub _make_repl_closure {
     my ($template) = @_;
-    # Normalise Python-style \1 → $1
-    (my $tmpl = $template) =~ s/\\([1-9])/\$$1/g;
     return sub {
-        # Snapshot the outer-match capture groups before any inner regex clobbers them
+        # Snapshot outer-match captures before inner regex ops clobber them
         my @c = ($1,$2,$3,$4,$5,$6,$7,$8,$9);
-        (my $r = $tmpl) =~ s/\$([1-9])/defined $c[$1-1] ? $c[$1-1] : ''/ge;
+        # Process Python re.sub replacement escapes:
+        #   \\ → \    \n → newline    \r → CR    \t → tab    \1-\9 → group
+        (my $r = $template) =~ s{\\(\\|n|r|t|[1-9])}{
+            $1 eq '\\' ? '\\' :
+            $1 eq 'n'  ? "\n" :
+            $1 eq 'r'  ? "\r" :
+            $1 eq 't'  ? "\t" :
+            (defined $c[$1-1] ? $c[$1-1] : '')
+        }ge;
         $r
     };
 }
@@ -175,9 +181,15 @@ sub compile_filters {
     my @compiled;
     for my $pair (@$filters) {
         my ($patt, $repl) = @$pair;
-        # Perl 5.26+ rejects unescaped { that are not valid quantifiers
-        # ({n}, {n,}, {n,m}).  Python's re allows them, so auto-escape here.
-        $patt =~ s/\{(?!\d+,?\d*\})/\\{/g;
+        # Perl 5.26+ warns on bare { not forming a valid quantifier ({n},{n,m}).
+        # Python's re allows bare { and uses \{ for literal braces.
+        # Translate to Perl-safe [{] / [}] in three steps to avoid
+        # double-processing: first stash \{ away, handle bare {, then restore.
+        my $PH = "\x00LB\x00";
+        $patt =~ s/\\[{]/$PH/g;                          # \{ → placeholder
+        $patt =~ s/[{](?!\d+,?\d*[}])/[{]/g;            # bare { (non-quantifier) → [{]
+        $patt =~ s/\Q$PH\E/[{]/g;                        # placeholder → [{]
+        $patt =~ s/\\[}]/[}]/g;                          # \} → [}]
         my $rgx = eval { qr/$patt/m };
         Error("$errmsg: '$patt': $@") if $@;
         push @compiled, [$rgx, _make_repl_closure($repl)];

@@ -3371,7 +3371,7 @@ sub get_raw_config {
                     ? File::Spec->catfile($dir, $val)
                     : $val;
                 if (-r $inc) {
-                    open my $fh, '<', $inc or next;
+                    open my $fh, '<:encoding(UTF-8)', $inc or next;
                     my @inc_lines = <$fh>;
                     close $fh;
                     chomp @inc_lines;
@@ -3490,13 +3490,15 @@ sub _parse_prepost_value {
     my ($val) = @_;
     my @tokens;
     # Match up to 2 tokens: "double quoted", 'single quoted', or unquoted-word
-    # Mirrors Python's _parse_prepost regex.
+    # Mirrors Python's _parse_prepost regex: closing quote is REQUIRED so that
+    # an unmatched ' (e.g. `' \x{2019}`) falls through to the unquoted-word branch.
     while (length $val && @tokens < 2) {
         $val =~ s/^\s+//;
-        if ($val =~ s/^"([^"]*)"?//) {
+        last unless length $val;
+        if ($val =~ s/^"([^"]*)"(?=\s|$)//) {
             push @tokens, $1;
         }
-        elsif ($val =~ s/^'([^']*)'?//) {
+        elsif ($val =~ s/^'([^']*)'(?=\s|$)//) {
             push @tokens, $1;
         }
         elsif (@tokens == 1) {
@@ -4122,7 +4124,7 @@ sub _get_label {
         return $self->{label};
     }
     $self->{anchor_count}++;
-    return sprintf('%s%03d', $self->{anchor_prefix}, $self->{anchor_count});
+    return sprintf('%s%s', $self->{anchor_prefix}, $self->{anchor_count});
 }
 
 sub add {
@@ -4734,12 +4736,18 @@ sub expandLineBreaks {
 # $1,$2,... from the outer match are still alive when the closure runs.
 sub _make_repl_closure {
     my ($template) = @_;
-    # Normalise Python-style \1 → $1
-    (my $tmpl = $template) =~ s/\\([1-9])/\$$1/g;
     return sub {
-        # Snapshot the outer-match capture groups before any inner regex clobbers them
+        # Snapshot outer-match captures before inner regex ops clobber them
         my @c = ($1,$2,$3,$4,$5,$6,$7,$8,$9);
-        (my $r = $tmpl) =~ s/\$([1-9])/defined $c[$1-1] ? $c[$1-1] : ''/ge;
+        # Process Python re.sub replacement escapes:
+        #   \\ → \    \n → newline    \r → CR    \t → tab    \1-\9 → group
+        (my $r = $template) =~ s{\\(\\|n|r|t|[1-9])}{
+            $1 eq '\\' ? '\\' :
+            $1 eq 'n'  ? "\n" :
+            $1 eq 'r'  ? "\r" :
+            $1 eq 't'  ? "\t" :
+            (defined $c[$1-1] ? $c[$1-1] : '')
+        }ge;
         $r
     };
 }
@@ -4751,9 +4759,15 @@ sub compile_filters {
     my @compiled;
     for my $pair (@$filters) {
         my ($patt, $repl) = @$pair;
-        # Perl 5.26+ rejects unescaped { that are not valid quantifiers
-        # ({n}, {n,}, {n,m}).  Python's re allows them, so auto-escape here.
-        $patt =~ s/\{(?!\d+,?\d*\})/\\{/g;
+        # Perl 5.26+ warns on bare { not forming a valid quantifier ({n},{n,m}).
+        # Python's re allows bare { and uses \{ for literal braces.
+        # Translate to Perl-safe [{] / [}] in three steps to avoid
+        # double-processing: first stash \{ away, handle bare {, then restore.
+        my $PH = "\x00LB\x00";
+        $patt =~ s/\\[{]/$PH/g;                          # \{ → placeholder
+        $patt =~ s/[{](?!\d+,?\d*[}])/[{]/g;            # bare { (non-quantifier) → [{]
+        $patt =~ s/\Q$PH\E/[{]/g;                        # placeholder → [{]
+        $patt =~ s/\\[}]/[}]/g;                          # \} → [}]
         my $rgx = eval { qr/$patt/m };
         Error("$errmsg: '$patt': $@") if $@;
         push @compiled, [$rgx, _make_repl_closure($repl)];
@@ -5797,6 +5811,8 @@ use Text::Txt2tags::Utils    qw(Error Debug Message Readfile Savefile dotted_spa
 use Text::Txt2tags::Regexes  qw(getRegexes);
 use Text::Txt2tags::Tags     qw(getTags);
 use Text::Txt2tags::Rules    qw(getRules);
+use File::Basename qw(dirname);
+use File::Spec;
 use Text::Txt2tags::Config   ();
 use Text::Txt2tags::Output   qw(
     maskEscapeChar unmaskEscapeChar EscapeCharHandler
@@ -5807,6 +5823,7 @@ use Text::Txt2tags::Output   qw(
     toc_inside_body toc_tagger toc_formatter
     doHeader doFooter finish_him
     get_encoding_string beautify_me
+    get_file_body
 );
 use Text::Txt2tags::Processing ();
 
@@ -5981,7 +5998,6 @@ sub process_source_file {
 sub convert {
     my ($bodylines, $config, $firstlinenr) = @_;
     $firstlinenr //= 1;
-
     set_global_config($config);
 
     my $target = $config->{target};
@@ -6279,13 +6295,70 @@ sub convert {
         }
         $f_lastwasblank = 0;
 
-        # ---- Comment line ------------------------------------------------
-        if ($line =~ $regex{comment} && $line !~ $regex{toc}) {
+        # ---- Special %! config line in body (must come before comment check) -
+        if ($line =~ $regex{special}) {
+            my ($targ, $val, $key) = Text::Txt2tags::ConfigLines->new->parse_line($line);
+
+            # %!currentfile: path — restore currentsourcefile after an include
+            if ($key eq 'currentfile') {
+                $CONF{currentsourcefile} = $val if $val;
+                next;
+            }
+
+            # %!include: filename — expand file contents inline
+            if ($key eq 'include') {
+                my %inc_ids = ('`' => 'verb', '"' => 'raw', "'" => 'tagged');
+                my $incfile = $val;
+                my $inctype = 't2t';
+
+                # Detect type delimiters: ``file`` or ""file"" or ''file''
+                if (length($incfile) >= 4) {
+                    my $mark = substr($incfile, 0, 1);
+                    if (exists $inc_ids{$mark}
+                        && substr($incfile, 0, 2) eq $mark x 2
+                        && substr($incfile, -2)   eq $mark x 2) {
+                        $inctype = $inc_ids{$mark};
+                        $incfile = substr($incfile, 2, length($incfile) - 4);
+                    }
+                }
+
+                # Resolve path relative to current source file's directory
+                my $curfile  = $CONF{currentsourcefile} // '';
+                my $incdir   = $curfile ? File::Basename::dirname($curfile) : '.';
+                my $fullpath = File::Spec->rel2abs(
+                    File::Spec->catfile($incdir, $incfile)
+                );
+
+                # Infinite-loop guard
+                if ($curfile && File::Spec->rel2abs($curfile) eq $fullpath) {
+                    Error("A file cannot include itself: $fullpath");
+                }
+
+                if ($inctype eq 't2t') {
+                    my $inclines = get_file_body($fullpath);
+                    # Insert: currentfile marker, included body lines, restore marker
+                    splice(@$bodylines, $lineref, 0,
+                        "%!currentfile: $fullpath",
+                        @$inclines,
+                        "%!currentfile: $curfile",
+                    );
+                }
+                else {
+                    # Verb / raw / tagged inclusion: read file and hold as block
+                    my $rawlines = Readfile($fullpath, 1);
+                    push @ret, @{ $BLOCK->blockin($inctype) };
+                    $BLOCK->holdaddfinal(@$rawlines);
+                    push @ret, @{ $BLOCK->blockout() };
+                }
+                next;
+            }
+
+            # All other %! directives in the body are ignored
             next;
         }
 
-        # ---- Special %! config line (in body = ignored) -----------------
-        if ($line =~ $regex{special}) {
+        # ---- Comment line ------------------------------------------------
+        if ($line =~ $regex{comment} && $line !~ $regex{toc}) {
             next;
         }
 
@@ -6844,7 +6917,7 @@ sub convert_this_files {
         my $tagged_toc = toc_tagger($marked_toc, $myconf);
         my $target_toc = toc_formatter($tagged_toc, $myconf);
         $target_body   = toc_inside_body($target_body, $target_toc, $myconf);
-        $target_toc    = [] if $AUTOTOC && !$myconf->{'toc-only'};
+        $target_toc    = [] if !$AUTOTOC && !$myconf->{'toc-only'};
 
         $myconf->{fullBody} = [@$target_toc, @$target_body, @$target_foot];
 
@@ -7067,6 +7140,7 @@ use Text::Txt2tags::Converter qw(get_infiles_config convert_this_files process_s
 # Parse command line
 # ---------------------------------------------------------------------------
 
+my @argv_orig = @ARGV;  # capture before GetOptions consumes them
 my %cli_opts;
 GetOptions(
     'target|t=s'        => \$cli_opts{target},
@@ -7181,6 +7255,8 @@ if ($rc_path && -f $rc_path) {
     if ($VERBOSE) {
         push @CMDLINE_RAW, ['all', 'verbose', ''] for 1 .. $VERBOSE;
     }
+    # record original argv for %%cmdline macro
+    push @CMDLINE_RAW, ['all', 'realcmdline', \@argv_orig];
 }
 
 # ---- Collect infiles from remaining ARGV ---------------------------------

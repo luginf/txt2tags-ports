@@ -26,6 +26,8 @@ use Text::Txt2tags::Utils    qw(Error Debug Message Readfile Savefile dotted_spa
 use Text::Txt2tags::Regexes  qw(getRegexes);
 use Text::Txt2tags::Tags     qw(getTags);
 use Text::Txt2tags::Rules    qw(getRules);
+use File::Basename qw(dirname);
+use File::Spec;
 use Text::Txt2tags::Config   ();
 use Text::Txt2tags::Output   qw(
     maskEscapeChar unmaskEscapeChar EscapeCharHandler
@@ -36,6 +38,7 @@ use Text::Txt2tags::Output   qw(
     toc_inside_body toc_tagger toc_formatter
     doHeader doFooter finish_him
     get_encoding_string beautify_me
+    get_file_body
 );
 use Text::Txt2tags::Processing ();
 
@@ -210,7 +213,6 @@ sub process_source_file {
 sub convert {
     my ($bodylines, $config, $firstlinenr) = @_;
     $firstlinenr //= 1;
-
     set_global_config($config);
 
     my $target = $config->{target};
@@ -508,13 +510,70 @@ sub convert {
         }
         $f_lastwasblank = 0;
 
-        # ---- Comment line ------------------------------------------------
-        if ($line =~ $regex{comment} && $line !~ $regex{toc}) {
+        # ---- Special %! config line in body (must come before comment check) -
+        if ($line =~ $regex{special}) {
+            my ($targ, $val, $key) = Text::Txt2tags::ConfigLines->new->parse_line($line);
+
+            # %!currentfile: path — restore currentsourcefile after an include
+            if ($key eq 'currentfile') {
+                $CONF{currentsourcefile} = $val if $val;
+                next;
+            }
+
+            # %!include: filename — expand file contents inline
+            if ($key eq 'include') {
+                my %inc_ids = ('`' => 'verb', '"' => 'raw', "'" => 'tagged');
+                my $incfile = $val;
+                my $inctype = 't2t';
+
+                # Detect type delimiters: ``file`` or ""file"" or ''file''
+                if (length($incfile) >= 4) {
+                    my $mark = substr($incfile, 0, 1);
+                    if (exists $inc_ids{$mark}
+                        && substr($incfile, 0, 2) eq $mark x 2
+                        && substr($incfile, -2)   eq $mark x 2) {
+                        $inctype = $inc_ids{$mark};
+                        $incfile = substr($incfile, 2, length($incfile) - 4);
+                    }
+                }
+
+                # Resolve path relative to current source file's directory
+                my $curfile  = $CONF{currentsourcefile} // '';
+                my $incdir   = $curfile ? File::Basename::dirname($curfile) : '.';
+                my $fullpath = File::Spec->rel2abs(
+                    File::Spec->catfile($incdir, $incfile)
+                );
+
+                # Infinite-loop guard
+                if ($curfile && File::Spec->rel2abs($curfile) eq $fullpath) {
+                    Error("A file cannot include itself: $fullpath");
+                }
+
+                if ($inctype eq 't2t') {
+                    my $inclines = get_file_body($fullpath);
+                    # Insert: currentfile marker, included body lines, restore marker
+                    splice(@$bodylines, $lineref, 0,
+                        "%!currentfile: $fullpath",
+                        @$inclines,
+                        "%!currentfile: $curfile",
+                    );
+                }
+                else {
+                    # Verb / raw / tagged inclusion: read file and hold as block
+                    my $rawlines = Readfile($fullpath, 1);
+                    push @ret, @{ $BLOCK->blockin($inctype) };
+                    $BLOCK->holdaddfinal(@$rawlines);
+                    push @ret, @{ $BLOCK->blockout() };
+                }
+                next;
+            }
+
+            # All other %! directives in the body are ignored
             next;
         }
 
-        # ---- Special %! config line (in body = ignored) -----------------
-        if ($line =~ $regex{special}) {
+        # ---- Comment line ------------------------------------------------
+        if ($line =~ $regex{comment} && $line !~ $regex{toc}) {
             next;
         }
 
@@ -1073,7 +1132,7 @@ sub convert_this_files {
         my $tagged_toc = toc_tagger($marked_toc, $myconf);
         my $target_toc = toc_formatter($tagged_toc, $myconf);
         $target_body   = toc_inside_body($target_body, $target_toc, $myconf);
-        $target_toc    = [] if $AUTOTOC && !$myconf->{'toc-only'};
+        $target_toc    = [] if !$AUTOTOC && !$myconf->{'toc-only'};
 
         $myconf->{fullBody} = [@$target_toc, @$target_body, @$target_foot];
 

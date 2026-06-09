@@ -261,7 +261,7 @@ sub get_raw_config {
                     ? File::Spec->catfile($dir, $val)
                     : $val;
                 if (-r $inc) {
-                    open my $fh, '<', $inc or next;
+                    open my $fh, '<:encoding(UTF-8)', $inc or next;
                     my @inc_lines = <$fh>;
                     close $fh;
                     chomp @inc_lines;
@@ -380,13 +380,15 @@ sub _parse_prepost_value {
     my ($val) = @_;
     my @tokens;
     # Match up to 2 tokens: "double quoted", 'single quoted', or unquoted-word
-    # Mirrors Python's _parse_prepost regex.
+    # Mirrors Python's _parse_prepost regex: closing quote is REQUIRED so that
+    # an unmatched ' (e.g. `' \x{2019}`) falls through to the unquoted-word branch.
     while (length $val && @tokens < 2) {
         $val =~ s/^\s+//;
-        if ($val =~ s/^"([^"]*)"?//) {
+        last unless length $val;
+        if ($val =~ s/^"([^"]*)"(?=\s|$)//) {
             push @tokens, $1;
         }
-        elsif ($val =~ s/^'([^']*)'?//) {
+        elsif ($val =~ s/^'([^']*)'(?=\s|$)//) {
             push @tokens, $1;
         }
         elsif (@tokens == 1) {

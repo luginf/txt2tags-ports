@@ -424,7 +424,7 @@ sub _get_label {
         return $self->{label};
     }
     $self->{anchor_count}++;
-    return sprintf('%s%03d', $self->{anchor_prefix}, $self->{anchor_count});
+    return sprintf('%s%s', $self->{anchor_prefix}, $self->{anchor_count});
 }
 
 sub add {
