@@ -473,13 +473,17 @@ sub close {
 # ===========================================================================
 
 package Text::Txt2tags::BlockMaster;
-our (%TAGS);
-BEGIN { *TAGS = \%Text::Txt2tags::State::TAGS; }
+our (%TAGS, %rules);
+BEGIN {
+    *TAGS  = \%Text::Txt2tags::State::TAGS;
+    *rules = \%Text::Txt2tags::State::rules;
+}
 
 sub new {
     my ($class) = @_;
     return bless {
         block_stack  => [],
+        prop_stack   => [],   # per-block property dicts (like Python's PRP stack)
         hold         => [],
         exclusive    => [qw(verb raw tagged comment)],
         last         => '',
@@ -499,12 +503,13 @@ sub depth {
 
 sub prop {
     my ($self, $name) = @_;
-    return $self->{"_prop_$name"};
+    return $self->{prop_stack}[-1]{$name} if @{ $self->{prop_stack} };
+    return undef;
 }
 
 sub set_prop {
     my ($self, $name, $val) = @_;
-    $self->{"_prop_$name"} = $val;
+    $self->{prop_stack}[-1]{$name} = $val if @{ $self->{prop_stack} };
 }
 
 # Map internal block names → TAGS key prefix
@@ -527,6 +532,7 @@ sub _tag_prefix { $BLOCK_TAG_PREFIX{$_[1]} // $_[1] }
 sub blockin {
     my ($self, $blockname) = @_;
     push @{ $self->{block_stack} }, $blockname;
+    push @{ $self->{prop_stack} }, {};   # fresh props for this block
     $self->{hold} = [];
     my @out;
 
@@ -541,6 +547,7 @@ sub blockout {
     my ($self, $flag_isempty) = @_;
     $flag_isempty //= 0;
     my $blockname = pop @{ $self->{block_stack} } // '';
+    pop @{ $self->{prop_stack} };        # discard this block's props
     my @out;
 
     return \@out if $flag_isempty;
@@ -619,23 +626,38 @@ sub new {
 }
 
 sub _parse_cell {
-    my ($self, $cell, $is_title, $cell_proc, $colspan) = @_;
-    $colspan //= 1;
+    my ($self, $cell, $is_title, $cell_proc, $colspan, $colindex, $colalign, $is_border_ctx) = @_;
+    $colspan      //= 1;
+    $colalign     //= [];
+    $is_border_ctx //= 0;
 
     # Detect alignment BEFORE stripping (based on leading/trailing spaces)
-    # 2+ leading AND 2+ trailing → Center
-    # 2+ leading only → Right
+    # Python splits by " | " so cells have 1 extra space per alignment level:
+    # 1 leading AND 1 trailing → Center
+    # 1 leading only → Right
     # Otherwise → no special alignment (default left)
+    # Only detect alignment if cell has non-space content (matches Python: if cell.strip())
     my $align = '';
-    if ($cell =~ /^  / && $cell =~ /  $/) { $align = 'Center' }
-    elsif ($cell =~ /^  /)                 { $align = 'Right'  }
+    my $cell_stripped = $cell;
+    $cell_stripped =~ s/^\s+|\s+$//g;
+    if ($cell_stripped ne '') {
+        if ($cell =~ /^ / && $cell =~ / $/) { $align = 'Center' }
+        elsif ($cell =~ /^ /)               { $align = 'Right'  }
+    }
+    # Default alignment is Left
+    my $cell_align = $align || 'Left';
 
     $cell =~ s/^\s+|\s+$//g if $rules{tablecellstrip};
 
-    my $open_tag  = $is_title ? ($TAGS{tableTitleCellOpen}  // '') : ($TAGS{tableCellOpen}  // '');
-    my $close_tag = $is_title ? ($TAGS{tableTitleCellClose} // '') : ($TAGS{tableCellClose} // '');
+    # Python: title rows fall back to normal cell tags if title-specific ones aren't defined
+    my $open_tag  = $is_title
+        ? ($TAGS{tableTitleCellOpen}  || $TAGS{tableCellOpen}  // '')
+        : ($TAGS{tableCellOpen}  // '');
+    my $close_tag = $is_title
+        ? ($TAGS{tableTitleCellClose} || $TAGS{tableCellClose} // '')
+        : ($TAGS{tableCellClose} // '');
 
-    if ($align && $rules{tablecellaligntype} eq 'cell' && $cell =~ /\S/) {
+    if ($align && $rules{tablecellaligntype} && $rules{tablecellaligntype} eq 'cell' && $cell =~ /\S/) {
         my $align_tag = $TAGS{"_tableCellAlign$align"} // '';
         $open_tag =~ s/~A~/$align_tag/;
     }
@@ -646,52 +668,174 @@ sub _parse_cell {
     }
     $open_tag =~ s/~[AS]~//g;  # remove unused placeholders
 
-    # Apply text processing (escape, inline tags, unmask)
+    # Apply text processing (escape, inline tags, unmask) FIRST
     $cell = $cell_proc->($cell) if $cell_proc;
+
+    # Bold wrapping for title rows AFTER cell_proc (matching Python order)
+    if ($is_title && $rules{tabletitlerowinbold}) {
+        my $bo = $TAGS{fontBoldOpen}  // '';
+        my $bc = $TAGS{fontBoldClose} // '';
+        $cell = "$bo$cell$bc";
+    }
+
+    # Multicol support: wrap cell when alignment differs from column default,
+    # or when colspan > 1 (Python: tablecellmulticol rule)
+    if ($rules{tablecellmulticol} && $TAGS{_tableCellMulticolOpen}) {
+        my $calignsep = $TAGS{tableColAlignSep} // '';
+        my $col_default = ($colindex < scalar @$colalign) ? $colalign->[$colindex] : 'Left';
+        my $need_multicol = ($colspan > 1) || ($cell_align ne $col_default);
+        if ($need_multicol) {
+            my $span_n = $colspan;
+            my $mc_open = $TAGS{_tableCellMulticolOpen};
+            # Replace \a with span count
+            $mc_open =~ s/\\a/$span_n/g;
+            # Replace ~C~ with cell alignment letter
+            my $align_letter = $TAGS{"_tableColAlign$cell_align"} // 'l';
+            $mc_open =~ s/~C~/$align_letter/g;
+            # For non-border tables: remove calignsep from multicol tag
+            if ($calignsep && !$is_border_ctx) {
+                $mc_open =~ s/\Q$calignsep\E//g;
+            }
+            $open_tag  = $mc_open;
+            $close_tag = $TAGS{_tableCellMulticolClose} // '';
+        }
+    }
 
     return ($open_tag, $cell, $close_tag);
 }
 
+sub parse_row_props {
+    my ($self, $line) = @_;
+    # Returns { cellalign, cellspan, colalign } without processing cells
+    $line =~ s/^ +//;
+    if ($line =~ / \|+ *$/) {
+        $line .= ' ';
+    } else {
+        $line .= ' | ';
+    }
+    $line =~ s/^ *\|[|_\/]? //;
+    $line =~ s/ (\|+)\| /\x07$1 | /g;
+    my @raw_cells = split(/ \| /, $line, -1);
+    pop @raw_cells;
+    my (@cells, @cellspan);
+    for my $cell (@raw_cells) {
+        my $span = 1;
+        if ($cell =~ /\x07(\|+)$/) {
+            $span = 1 + length($1);
+            $cell =~ s/\x07\|+$//;
+        }
+        push @cells, $cell;
+        push @cellspan, $span;
+    }
+    my @cellalign;
+    for my $cell (@cells) {
+        my $align = 'Left';
+        my $stripped = $cell;
+        $stripped =~ s/^\s+|\s+$//g;
+        if ($stripped ne '') {
+            if ($cell =~ /^ / && $cell =~ / $/) { $align = 'Center' }
+            elsif ($cell =~ /^ /)               { $align = 'Right'  }
+        }
+        push @cellalign, $align;
+    }
+    my @colalign;
+    for my $i (0..$#cellalign) {
+        push @colalign, ($cellalign[$i]) x $cellspan[$i];
+    }
+    return { cellalign => \@cellalign, cellspan => \@cellspan, colalign => \@colalign };
+}
+
 sub parse_row {
-    my ($self, $line, $cell_proc) = @_;
-    # Remove leading | and determine if border/align
+    my ($self, $line, $cell_proc, $context) = @_;
+    $context //= {};
+    my $table_colalign  = $context->{colalign}          // [];
+    my $table_is_border = $context->{is_border}         // 0;
+    my $row_open_override = $context->{row_open_override};  # undef = use TAGS
+
     my $is_title  = 0;
     my $is_border = 0;
-    my $is_center = 0;
 
-    $line =~ s/^ *//;
-    if ($line =~ s/^\|\|//) { $is_title = 1 }
-    else { $line =~ s/^\|// }
+    # Match Python: lstrip, then detect table marks by position
+    $line =~ s/^ +//;
 
-    my @raw_cells = split /\|/, $line, -1;
-    # Remove trailing empty cell from trailing |
-    pop @raw_cells if @raw_cells && ($raw_cells[-1] =~ /^\s*$/);
-
-    # Merge consecutive TRULY empty cells (from ||) into colspan for preceding cell
-    # Whitespace-only cells (from | |) are NOT merged.
-    my @cells;     # [ [$content, $colspan], ... ]
-    for my $cell (@raw_cells) {
-        if ($cell eq '' && @cells) {
-            $cells[-1][1]++;   # increment colspan of preceding cell
-        } else {
-            push @cells, [$cell, 1];
-        }
+    # Detect title mark: line[1] == '|' means || prefix
+    if (length($line) > 1 && substr($line, 1, 1) eq '|') {
+        $is_title = 1;
     }
 
-    my $row_open  = $TAGS{tableRowOpen}  // '';
-    my $row_close = $TAGS{tableRowClose} // '';
-    my @out;
-    push @out, $row_open if $row_open;
+    # Detect border mark and normalize EOL
+    # Python: m = re.search(r" (\|+) *$", line)
+    if ($line =~ / \|+ *$/) {
+        $line .= ' ';       # border detected: add trailing space
+        $is_border = 1;
+    } else {
+        $line .= ' | ';     # no border: add fake " | " terminator
+    }
 
+    # Delete table mark: Python regex is ^ *\|([|_/])? (note: trailing space required)
+    # This removes the leading | (or ||, |_, |/) plus one space
+    $line =~ s/^ *\|[|_\/]? //;
+
+    # Detect colspan: Python: re.sub(r" (\|+)\| ", "\a\\1 | ", line)
+    # \a = chr(7) = \x07. No leading space in replacement — matches Python exactly.
+    $line =~ s/ (\|+)\| /\x07$1 | /g;
+
+    # Split cells by " | " (space-pipe-space), drop the fake last element
+    # This naturally strips single-space padding, matching Python's behavior
+    my @raw_cells = split(/ \| /, $line, -1);
+    pop @raw_cells;  # remove fake last element
+
+    # Process colspan using \x07 marker (Python's \a marker approach)
+    my @cells;
+    for my $cell (@raw_cells) {
+        my $span = 1;
+        if ($cell =~ /\x07(\|+)$/) {
+            $span = 1 + length($1);
+            $cell =~ s/\x07\|+$//;
+        }
+        push @cells, [$cell, $span];
+    }
+    # Python's two-pass (join+split on SEPARATOR) produces [""] for empty rows
+    # (e.g. "| |"), giving one empty cell. Replicate that behaviour here.
+    push @cells, ['', 1] unless @cells;
+
+    # Choose row open/close based on whether this is a title row
+    my ($row_open, $row_close, $cell_sep);
+    if ($is_title && $TAGS{tableTitleRowOpen}) {
+        $row_open  = $TAGS{tableTitleRowOpen}  // '';
+        $row_close = $TAGS{tableTitleRowClose} // '';
+        $cell_sep  = $TAGS{tableTitleCellSep}  // '';
+    } else {
+        $row_open  = $TAGS{tableRowOpen}  // '';
+        $row_close = $TAGS{tableRowClose} // '';
+        $cell_sep  = $TAGS{tableCellSep}  // '';
+    }
+
+    # Apply row_open override from context (e.g. tex non-border suppresses \hline)
+    $row_open = $row_open_override if defined $row_open_override;
+
+    # Python: breaktablelineopen adds \n after rowopen
+    $row_open .= "\n" if $rules{breaktablelineopen};
+
+    # Python always joins all cells on one line (with sep, which may be empty).
+    # The row_open/row_close wrap the entire joined string.
+    # breaktablecell adds \n after each cell's close tag.
+    my @cell_strings;
+    my $colindex = 0;
     for my $cell_info (@cells) {
         my ($cell, $colspan) = @$cell_info;
         $cell //= '';
-        my ($co, $ctxt, $cc) = $self->_parse_cell($cell, $is_title, $cell_proc, $colspan);
-        push @out, "$co$ctxt$cc";
+        my ($co, $ctxt, $cc) = $self->_parse_cell(
+            $cell, $is_title, $cell_proc, $colspan,
+            $colindex, $table_colalign, $table_is_border
+        );
+        $cc .= "\n" if $rules{breaktablecell};
+        push @cell_strings, "$co$ctxt$cc";
+        $colindex += $colspan;
     }
-
-    push @out, $row_close if $row_close;
-    return \@out;
+    my $row = $row_open . join($cell_sep, @cell_strings) . $row_close;
+    # Split on embedded newlines to produce multi-line output
+    return [split /\n/, $row, -1];
 }
 
 # ===========================================================================

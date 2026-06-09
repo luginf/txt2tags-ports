@@ -47,7 +47,7 @@ sub set_global_config {
     my ($config) = @_;
     %CONF  = %$config;
     %rules = %{ getRules($config) };
-    %TAGS  = %{ getTags($config) };
+    %TAGS  = %{ getTags($config, \%rules) };
     %regex = %{ getRegexes() };
     $TARGET= $config->{target} // '';
 }
@@ -90,28 +90,35 @@ sub parse_images {
         $txt = fix_relative_path($txt);
 
         if ($rules{imgalignable}) {
-            # Determine alignment from surrounding context (before/after the [img])
+            # Match Python get_image_align logic:
+            # before empty, after non-empty → left
+            # before non-empty, after empty → right
+            # else (standalone, both, or neither) → center
             my $align;
-            my $has_before      = length($before) > 0;
-            my $has_after       = length($after)  > 0;
-            my $has_before_text = ($before =~ /\S/);
-            my $has_after_text  = ($after  =~ /\S/);
+            my $has_before = length($before) > 0;
+            my $has_after  = length($after)  > 0;
+            if (!$has_before && $has_after) { $align = 'left'   }
+            elsif ($has_before && !$has_after) { $align = 'right'  }
+            else                               { $align = 'center' }
 
-            if ($has_before && $has_after && !$has_before_text && !$has_after_text) {
-                $align = 'center';   # spaces on both sides → center with wrapper
+            my $align_key = ucfirst($align);   # Left / Right / Center
+
+            # Python: if imgAlignX tag exists, use it as the whole tag;
+            # otherwise substitute _imgAlignX into img's ~A~ placeholder.
+            if ($TAGS{"imgAlign$align_key"}) {
+                $tag = $TAGS{"imgAlign$align_key"};
+            } else {
+                my $align_tag = $TAGS{"_imgAlign$align_key"} // '';
+                $tag =~ s/~A~/$align_tag/;
             }
-            elsif (!$has_before && $has_after) { $align = 'left'   }
-            elsif ($has_before  && !$has_after) { $align = 'right'  }
-            else                                { $align = 'middle' }
 
-            # Map logical align to tag key ('middle'/'center' both → Center tag)
-            my $align_key  = ($align eq 'left') ? 'Left' : ($align eq 'right') ? 'Right' : 'Center';
-            my $align_tag  = $TAGS{"_imgAlign$align_key"} // '';
-            $tag =~ s/~A~/$align_tag/;
-
-            # Center wrapper for HTML when image has spaces on both sides
+            # Python "dirty fix": add center wrapper only when the rest of the
+            # line (after removing the image) is whitespace-only (not empty).
             if ($align eq 'center' && $TARGET =~ /^x?html$/) {
-                $tag = "<center>$tag</center>";
+                my $rest = $before . $after;
+                if ($rest =~ /^\s+$/) {
+                    $tag = "<center>$tag</center>";
+                }
             }
         }
         else {
@@ -122,12 +129,13 @@ sub parse_images {
         my $first = 1;
         $tag =~ s/\\a/$first ? do { $first=0; $txt } : $txt/ge;
 
-        # Ugly hack to avoid infinite loop when img tag contains []
+        # Escape [ to prevent re-matching on the next while iteration.
+        # The placeholder is unescaped after the loop ends (matching Python behavior).
         $tag =~ s/\[/vvvvEscSquarevvvv/g;
         $line =~ s/$regex{img}/$tag/;
-        $line =~ s/vvvvEscSquarevvvv/[/g;
     }
 
+    $line =~ s/vvvvEscSquarevvvv/[/g;
     return $line;
 }
 
@@ -210,12 +218,59 @@ sub convert {
     my $MASK     = Text::Txt2tags::MaskMaster->new;
     $TITLE       = Text::Txt2tags::TitleMaster->new;
     my $quote_depth = 0;   # current nesting depth of BLOCKQUOTE
+    my $quote_oneline_buf;  # undef or string buffer for onelinequote content
 
     # List nesting state (bypass BlockMaster for lists)
-    my @list_stack        = ();  # each: {indent=>str, type=>str, marker=>char}
+    my @list_stack        = ();  # each: {indent=>str, type=>str, open_item=>0}
     my $list_pending_blank = 0;  # deferred <P></P> within a list
+    my @section_stack     = ();  # open section levels (for titleblocks targets)
     my @ret;                     # output lines (declared before closures so they can capture it)
     my $f_lastwasblank = 0;
+    my $para_content_start = -1;  # index in @ret where current para content begins (for onelinepara)
+
+    # Table state (set when table block opens, used for all rows in the table)
+    my $table_is_border  = 0;
+    my $table_colalign   = [];
+    my $table_row_open_override = undef;  # undef = use TAGS; '' = suppress; defined = use value
+
+    # Return the item-level close tag for a given list type
+    my $_item_close_tag = sub {
+        my ($type) = @_;
+        return $type eq 'deflist'
+            ? ($TAGS{deflistItem2Close} // '')
+            : ($TAGS{$type . 'ItemClose'} // '');
+    };
+
+    # Emit an item close tag (appending to last line if notbreaklistitemclose)
+    my $_emit_item_close = sub {
+        my ($indent, $ic) = @_;
+        return unless $ic;
+        if ($rules{notbreaklistitemclose}) {
+            $ret[-1] .= $ic if @ret;
+        } else {
+            push @ret, $indent . $ic;
+        }
+    };
+
+    # Effective indent for list tags (empty when keeplistindent=0)
+    my $_list_ind = sub {
+        my ($ind) = @_;
+        return $rules{keeplistindent} ? $ind : '';
+    };
+
+    # Compact-aware list open/close tag helpers (Python compactlist rule)
+    my $_list_open_tag = sub {
+        my ($type) = @_;
+        return ($rules{compactlist} && $TAGS{$type . 'OpenCompact'})
+            ? $TAGS{$type . 'OpenCompact'}
+            : ($TAGS{$type . 'Open'} // '');
+    };
+    my $_list_close_tag = sub {
+        my ($type) = @_;
+        return ($rules{compactlist} && $TAGS{$type . 'CloseCompact'})
+            ? $TAGS{$type . 'CloseCompact'}
+            : ($TAGS{$type . 'Close'} // '');
+    };
 
     # Close list levels down to target indent length; return old top indent
     my $_close_list_levels = sub {
@@ -223,7 +278,12 @@ sub convert {
         my $old_top = @list_stack ? $list_stack[-1]{indent} : '';
         while (@list_stack && length($list_stack[-1]{indent}) > $target_len) {
             my $cl = pop @list_stack;
-            push @ret, $cl->{indent} . ($TAGS{ $cl->{type} . 'Close' } // '');
+            if ($cl->{open_item}) {
+                my $ic = $_item_close_tag->($cl->{type});
+                $_emit_item_close->($_list_ind->($cl->{indent}), $ic);
+            }
+            my $lc_tag = $cl->{wide} ? ($TAGS{$cl->{type} . 'Close'} // '') : $_list_close_tag->($cl->{type});
+            push @ret, $_list_ind->($cl->{indent}) . $lc_tag if $lc_tag;
             if (!@list_stack) {
                 # Outermost list just closed
                 $BLOCK->last($cl->{type});
@@ -238,7 +298,12 @@ sub convert {
         $list_pending_blank = 0;
         while (@list_stack) {
             my $cl = pop @list_stack;
-            push @ret, $cl->{indent} . ($TAGS{ $cl->{type} . 'Close' } // '');
+            if ($cl->{open_item}) {
+                my $ic = $_item_close_tag->($cl->{type});
+                $_emit_item_close->($_list_ind->($cl->{indent}), $ic);
+            }
+            my $lc_tag = $cl->{wide} ? ($TAGS{$cl->{type} . 'Close'} // '') : $_list_close_tag->($cl->{type});
+            push @ret, $_list_ind->($cl->{indent}) . $lc_tag if $lc_tag;
             if (!@list_stack) {
                 $BLOCK->last($cl->{type});
                 push @ret, '' if $rules{ 'blanksaround' . $cl->{type} };
@@ -332,6 +397,15 @@ sub convert {
         }
 
         # ---- Verbatim block ----------------------------------------------
+        # Close a verb block that was mapped from a table when line is no longer a table
+        if ($BLOCK->block eq 'verb' && ($BLOCK->prop('mapped') // '') eq 'table'
+            && $line !~ $regex{table}) {
+            my $result = $BLOCK->blockout;
+            push @ret, @$result;
+            push @ret, '' if $rules{blanksaroundverb};
+            # fall through to process the current line normally
+        }
+
         if ($BLOCK->block eq 'verb') {
             if ($line =~ $regex{blockVerbClose}) {
                 my $result = $BLOCK->blockout;
@@ -380,23 +454,46 @@ sub convert {
                 }
                 else {
                     $list_pending_blank = 1;
+                    # Note: the blank is deferred; it will be pushed in the
+                    # continuation or item handler when !parainsidelist,
+                    # but discarded if the next blank closes the list.
                 }
             }
             elsif ($quote_depth > 0) {
                 # Blank line closes all open BLOCKQUOTE levels
                 my $ti = ($rules{tagnotindentable} ? '' : "\t");
-                for my $lv (reverse 1 .. $quote_depth) {
-                    push @ret, ($ti x $lv) . ($TAGS{blockQuoteClose} // '');
+                if ($rules{onelinequote} && defined $quote_oneline_buf) {
+                    push @ret, $quote_oneline_buf;
+                    $quote_oneline_buf = undef;
                 }
+                for my $lv (reverse 1 .. $quote_depth) {
+                    my $qtag = $TAGS{blockQuoteClose} // '';
+                    push @ret, ($ti x $lv) . $qtag if $qtag;
+                }
+                # Python emits one blank per depth level (each nested quote adds its own after-blank)
+                my $closing_depth = $quote_depth;
                 $quote_depth = 0;
                 $BLOCK->last('quote');
-                push @ret, '' if $rules{blanksaroundquote};
+                push @ret, (('') x $closing_depth) if $rules{blanksaroundquote};
                 $f_lastwasblank = 1;
             }
             elsif ($BLOCK->block =~ /^(para|table)$/) {
                 # Blank line closes current block
                 my $closed_block = $BLOCK->block;
-                push @ret, @{ $BLOCK->blockout };
+                my $block_out = $BLOCK->blockout;
+                # tex gotcha: for border tables, prepend tableRowOpen to tableClose
+                if ($closed_block eq 'table' && $target =~ /^tex/ && $table_is_border) {
+                    my $row_open = $TAGS{tableRowOpen} // '';
+                    if ($row_open && @$block_out) {
+                        $block_out->[-1] = $row_open . $block_out->[-1];
+                    }
+                }
+                push @ret, @$block_out;
+                if ($rules{onelinepara} && $closed_block eq 'para' && $para_content_start >= 0) {
+                    my @para_lines = splice(@ret, $para_content_start);
+                    push @ret, join(' ', @para_lines) if @para_lines;
+                    $para_content_start = -1;
+                }
                 push @ret, '' if $rules{"blanksaround$closed_block"};
                 $f_lastwasblank = 1;
             }
@@ -412,8 +509,7 @@ sub convert {
         $f_lastwasblank = 0;
 
         # ---- Comment line ------------------------------------------------
-        if ($line =~ $regex{comment} && $line !~ $regex{macros}
-                                     && $line !~ $regex{toc}) {
+        if ($line =~ $regex{comment} && $line !~ $regex{toc}) {
             next;
         }
 
@@ -452,7 +548,7 @@ sub convert {
         # ---- Title -------------------------------------------------------
         my $is_title = 0;
         for my $kind (qw(title numtitle)) {
-            if ($line =~ $regex{$kind}) {
+            if (!@list_stack && $line =~ $regex{$kind}) {
                 my $id    = $+{id};
                 my $txt   = $+{txt};
                 my $label = $+{label} // '';  # must capture before any regex ops reset $+
@@ -462,7 +558,13 @@ sub convert {
                 # Close any open lists and blocks
                 $_close_all_lists->();
                 if ($BLOCK->block) {
+                    my $was_blk = $BLOCK->block;
                     push @ret, @{ $BLOCK->blockout };
+                    if ($rules{onelinepara} && $was_blk eq 'para' && $para_content_start >= 0) {
+                        my @para_lines = splice(@ret, $para_content_start);
+                        push @ret, join(' ', @para_lines) if @para_lines;
+                        $para_content_start = -1;
+                    }
                 }
 
                 # Escape title text (raw/tagged/mono marks stay as literal markup in titles)
@@ -476,40 +578,118 @@ sub convert {
                 my $display_txt = $count_id ? "$count_id. $txt" : $txt;
 
                 # Build the title tag
-                my $tag = $TAGS{"${kind}$level"} || $TAGS{"title$level"} || "\a";
                 my $anchor_tag = '';
                 # Only add anchor when: title has explicit label OR TOC is on
                 if ($TAGS{anchor} && ($label || $CONF{toc})) {
                     ($anchor_tag = $TAGS{anchor}) =~ s/\\a/$lbl/;
                 }
+
+                my $tag;
+                if ($rules{titleblocks}) {
+                    $tag = $TAGS{"${kind}${level}Open"} || $TAGS{"title${level}Open"} || "\a";
+                } else {
+                    $tag = $TAGS{"${kind}$level"} || $TAGS{"title$level"} || "\a";
+                }
                 $tag =~ s/~A~/$anchor_tag/g;
-                $tag =~ s/\\a/$display_txt/;
+                my $tag_tmpl = $tag;   # save template (before \a substitution) for underline
+                $tag =~ s/\\a/$display_txt/g;
+
+                # txt target: always add blank before title when there's been a prior block
+                # (mirrors Python's `if state.BLOCK.count > 1: ret.append("")`)
+                if ($TARGET eq 'txt' && $BLOCK->last ne '') {
+                    push @ret, '';
+                }
 
                 # blank before: only if previous block didn't already add one
                 push @ret, '' if $blank_before->($kind);
-                push @ret, $tag;
+
+                # For titleblocks targets: close open sections AFTER the blank
+                if ($rules{titleblocks}) {
+                    while (@section_stack && $section_stack[-1] >= $level) {
+                        my $lv = pop @section_stack;
+                        push @ret, $TAGS{"title${lv}Close"} // '</section>';
+                    }
+                }
+
+                # Emit the title (may span multiple lines for titleblocks targets)
+                push @ret, split /\n/, $tag, -1;
+
+                # txt target: add underline (=×len) using same tag template
+                if ($TARGET eq 'txt') {
+                    my $underline = '=' x length($display_txt);
+                    (my $under_tag = $tag_tmpl) =~ s/\\a/$underline/g;
+                    push @ret, $under_tag;
+                }
+
                 # blank after: always (if rule set)
                 push @ret, '' if $rules{"blanksaround$kind"};
                 $BLOCK->last($kind);   # update last-block tracker
+
+                if ($rules{titleblocks}) {
+                    push @section_stack, $level;
+                }
                 $is_title = 1;
                 last;
             }
         }
         next if $is_title;
 
+        # Tables mapped to verb for non-tableable targets
+        if (!$rules{tableable} && $line =~ $regex{table}) {
+            if ($BLOCK->block ne 'verb') {
+                push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
+                push @ret, '' if $blank_before->('verb') && !$rules{"blanksaround" . $BLOCK->last};
+                push @ret, @{ $BLOCK->blockin('verb') };
+                $BLOCK->set_prop('mapped', 'table');
+            }
+            $BLOCK->holdadd($line);
+            next;
+        }
+
         # ---- Table -------------------------------------------------------
         if ($line =~ $regex{table} && $rules{tableable}) {
-            # Detect border/alignment from first cell marker
-            my $is_title_row = ($line =~ /^ *\|\|/);
             if ($BLOCK->block ne 'table') {
                 $_close_all_lists->();
                 push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
                 push @ret, '' if $blank_before->('table');
-                my $border_tag = ($line =~ /\|\s*$/) ? ($TAGS{_tableBorder} // '') : '';
-                my $align_tag  = ($line =~ /^ {3,}\|/) ? ($TAGS{_tableAlignCenter} // '') : '';
+                $table_is_border  = ($line =~ /\|\s*$/) ? 1 : 0;
+                my $border_tag = $table_is_border ? ($TAGS{_tableBorder} // '') : '';
+                my $align_tag  = ($line =~ /^ /) ? ($TAGS{_tableAlignCenter} // '') : '';
                 my $open_tag   = $TAGS{tableOpen} // '';
                 $open_tag =~ s/~A~/$align_tag/g;
                 $open_tag =~ s/~B~/$border_tag/g;
+                # Get column info from first row (Python _get_full_tag / TableMaster.__init__)
+                my $tm_tmp = Text::Txt2tags::TableMaster->new;
+                my $props  = $tm_tmp->parse_row_props($line);
+                $table_colalign = $props->{colalign};
+                my $n_cols = 0;
+                for my $span (@{$props->{cellspan}}) { $n_cols += $span }
+                # Substitute ~C~ with column alignment string (Python _get_full_tag logic)
+                if ($open_tag =~ /~C~/) {
+                    my $calignsep = $TAGS{tableColAlignSep} // '';
+                    my $colalign_str = '';
+                    if ($rules{tablecellaligntype} && $rules{tablecellaligntype} eq 'column') {
+                        my @calign = map { $TAGS{"_tableColAlign$_"} // 'l' } @$table_colalign;
+                        $colalign_str = $calignsep ? join($calignsep, @calign) : join('', @calign);
+                    }
+                    $open_tag =~ s/~C~/$colalign_str/g;
+                    # Python: for non-border, remove ALL calignsep from entire open_tag
+                    if ($calignsep && !$table_is_border) {
+                        $open_tag =~ s/\Q$calignsep\E//g;
+                    }
+                }
+                # Substitute n_cols (tablecolumnsnumber rule, e.g. dbk)
+                if ($rules{tablecolumnsnumber} && $open_tag =~ /n_cols/) {
+                    $open_tag =~ s/n_cols/$n_cols/g;
+                }
+                # tex gotcha: for non-border suppress row open; for border prepend to close
+                if ($target =~ /^tex/) {
+                    $table_row_open_override = $table_is_border
+                        ? ($TAGS{tableRowOpen} // '')
+                        : '';
+                } else {
+                    $table_row_open_override = undef;
+                }
                 push @ret, $open_tag if $open_tag;
                 $BLOCK->blockin('table');
             }
@@ -522,12 +702,23 @@ sub convert {
                 $txt = $MASK->undo($txt);
                 return $txt;
             };
-            my $row_lines = $tm->parse_row($line, $cell_proc);
+            my $row_context = {
+                colalign          => $table_colalign,
+                is_border         => $table_is_border,
+                row_open_override => $table_row_open_override,
+            };
+            my $row_lines = $tm->parse_row($line, $cell_proc, $row_context);
             push @ret, @$row_lines;
             next;
         }
         elsif ($BLOCK->block eq 'table') {
-            push @ret, $TAGS{tableClose} // '';
+            # tex gotcha: for border tables, prepend tableRowOpen to tableClose
+            my $close = $TAGS{tableClose} // '';
+            if ($target =~ /^tex/ && $table_is_border) {
+                my $row_open = $TAGS{tableRowOpen} // '';
+                $close = $row_open . $close if $row_open;
+            }
+            push @ret, $close;
             push @ret, '' if $rules{blanksaroundtable};
             $BLOCK->blockout;   # discard hold (rows were output inline)
             $BLOCK->last('table');  # update tracker since blockout discarded output
@@ -537,10 +728,15 @@ sub convert {
         if ($line =~ $regex{quote}) {
             my $new_depth = length( ($line =~ /^(\t+)/)[0] );
 
+            # Clamp depth to quotemaxdepth if set
+            my $qmax = $rules{quotemaxdepth} // 0;
+            $new_depth = $qmax if $qmax && $new_depth > $qmax;
+
             if ($quote_depth == 0) {
                 # Entering quote from non-quote context
                 push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
                 push @ret, '' if $blank_before->('quote');
+                $quote_oneline_buf = '' if $rules{onelinequote};
             }
 
             # Tag prefix per depth level
@@ -551,14 +747,28 @@ sub convert {
 
             # Open new BLOCKQUOTE levels (depth increased)
             if ($new_depth > $quote_depth) {
+                if ($rules{onelinequote} && defined $quote_oneline_buf && length($quote_oneline_buf)) {
+                    push @ret, $quote_oneline_buf;
+                    $quote_oneline_buf = '';
+                }
+                # Python adds blank before nested quote content (inner._should_add_blank_line("before","quote") depth>1)
+                if ($new_depth > 1 && $rules{blanksaroundquote}) {
+                    push @ret, '';
+                }
                 for my $lv ($quote_depth + 1 .. $new_depth) {
-                    push @ret, ($ti x $lv) . ($TAGS{blockQuoteOpen} // '');
+                    my $qtag = $TAGS{blockQuoteOpen} // '';
+                    push @ret, ($ti x $lv) . $qtag if $qtag;
                 }
             }
             # Close excess BLOCKQUOTE levels (depth decreased)
             elsif ($new_depth < $quote_depth) {
+                if ($rules{onelinequote} && defined $quote_oneline_buf && length($quote_oneline_buf)) {
+                    push @ret, $quote_oneline_buf;
+                    $quote_oneline_buf = '';
+                }
                 for my $lv (reverse $new_depth + 1 .. $quote_depth) {
-                    push @ret, ($ti x $lv) . ($TAGS{blockQuoteClose} // '');
+                    my $qtag = $TAGS{blockQuoteClose} // '';
+                    push @ret, ($ti x $lv) . $qtag if $qtag;
                 }
             }
             $quote_depth = $new_depth;
@@ -568,18 +778,28 @@ sub convert {
             $line = doEscape($target, $line);
             $line = add_inline_tags($line);
             $line = $MASK->undo($line);
-            push @ret, ($ci x $new_depth) . ($cq x $new_depth) . $line;
+            if ($rules{onelinequote}) {
+                $quote_oneline_buf .= ($quote_oneline_buf ? ' ' : '') . $line;
+            } else {
+                push @ret, ($ci x $new_depth) . ($cq x $new_depth) . $line;
+            }
             next;
         }
         elsif ($quote_depth > 0) {
             # Non-quote line encountered while in quote: close all levels
             my $ti = ($rules{tagnotindentable} ? '' : "\t");
-            for my $lv (reverse 1 .. $quote_depth) {
-                push @ret, ($ti x $lv) . ($TAGS{blockQuoteClose} // '');
+            if ($rules{onelinequote} && defined $quote_oneline_buf) {
+                push @ret, $quote_oneline_buf;
+                $quote_oneline_buf = undef;
             }
+            for my $lv (reverse 1 .. $quote_depth) {
+                my $qtag = $TAGS{blockQuoteClose} // '';
+                push @ret, ($ti x $lv) . $qtag if $qtag;
+            }
+            my $closing_depth = $quote_depth;
             $quote_depth = 0;
             $BLOCK->last('quote');
-            push @ret, '' if $rules{blanksaroundquote};
+            push @ret, (('') x $closing_depth) if $rules{blanksaroundquote};
             # Fall through to process current line as non-quote
         }
 
@@ -601,10 +821,29 @@ sub convert {
             elsif ($line =~ $regex{numlist})  { $list_type = 'numlist'; $ind = $1; ($item_txt = $line) =~ s/^ *\+ // }
             else                              { $list_type = 'list';    $ind = $1; ($item_txt = $line) =~ s/^ *- //  }
 
-            # Emit deferred paragraph marker before depth changes
-            if ($list_pending_blank && $rules{parainsidelist}) {
-                my $top_ind = @list_stack ? $list_stack[-1]{indent} : '';
-                push @ret, $top_ind . ($TAGS{paragraphOpen}//'') . ($TAGS{paragraphClose}//'');
+            # Emit deferred blank before depth/type changes
+            if ($list_pending_blank) {
+                if ($rules{parainsidelist}) {
+                    # Mark current list as wide and retroactively switch to non-compact open tag
+                    if ($rules{compactlist} && @list_stack && !$list_stack[-1]{wide}) {
+                        my $entry = $list_stack[-1];
+                        $entry->{wide} = 1;
+                        if (defined $entry->{open_tag_idx}) {
+                            my $nco = $TAGS{$entry->{type} . 'Open'} // '';
+                            $ret[$entry->{open_tag_idx}] = $_list_ind->($entry->{indent}) . $nco;
+                        }
+                    }
+                    my $po = $TAGS{paragraphOpen}  // '';
+                    my $pc = $TAGS{paragraphClose} // '';
+                    if ($po || $pc) {
+                        my $top_ind = @list_stack ? $list_stack[-1]{indent} : '';
+                        push @ret, $top_ind . $po . $pc;
+                    } else {
+                        push @ret, '';
+                    }
+                } else {
+                    push @ret, '';
+                }
             }
             $list_pending_blank = 0;
 
@@ -614,45 +853,114 @@ sub convert {
             if (@list_stack == 0) {
                 # Entering list from non-list context, or stack emptied by reverse nesting
                 push @ret, '' if $was_empty && $blank_before->($list_type);
-                push @list_stack, { indent => $ind, type => $list_type };
-                push @ret, $ind . ($TAGS{$list_type . 'Open'} // '');
+                my $lo_tag = $_list_open_tag->($list_type);
+                my $open_idx = @ret;
+                push @ret, $_list_ind->($ind) . $lo_tag if $lo_tag;
+                push @list_stack, { indent => $ind, type => $list_type, open_item => 0, open_tag_idx => $lo_tag ? $open_idx : undef, wide => 0 };
             }
             elsif (length($ind) > length($old_top)) {
                 # New item is deeper than the old top → open sublist
-                push @list_stack, { indent => $ind, type => $list_type };
-                push @ret, $ind . ($TAGS{$list_type . 'Open'} // '');
+                my $lo_tag = $_list_open_tag->($list_type);
+                my $open_idx = @ret;
+                push @ret, $_list_ind->($ind) . $lo_tag if $lo_tag;
+                push @list_stack, { indent => $ind, type => $list_type, open_item => 0, open_tag_idx => $lo_tag ? $open_idx : undef, wide => 0 };
             }
             elsif ($list_stack[-1]{type} ne $list_type) {
-                # Same indent, different list type → close old, open new
+                # Same indent, different list type → close old item then list, open new
                 my $cl = pop @list_stack;
-                push @ret, $cl->{indent} . ($TAGS{$cl->{type} . 'Close'} // '');
-                push @list_stack, { indent => $ind, type => $list_type };
-                push @ret, $ind . ($TAGS{$list_type . 'Open'} // '');
+                if ($cl->{open_item}) {
+                    my $ic = $_item_close_tag->($cl->{type});
+                    $_emit_item_close->($_list_ind->($cl->{indent}), $ic);
+                }
+                my $lc_tag = $cl->{wide} ? ($TAGS{$cl->{type} . 'Close'} // '') : $_list_close_tag->($cl->{type});
+                push @ret, $_list_ind->($cl->{indent}) . $lc_tag if $lc_tag;
+                if (!@list_stack) {
+                    $BLOCK->last($cl->{type});
+                    push @ret, '' if $rules{'blanksaround' . $cl->{type}};
+                }
+                my $lo_tag = $_list_open_tag->($list_type);
+                my $open_idx = @ret;
+                push @ret, $_list_ind->($ind) . $lo_tag if $lo_tag;
+                push @list_stack, { indent => $ind, type => $list_type, open_item => 0, open_tag_idx => $lo_tag ? $open_idx : undef, wide => 0 };
             }
-            # else: same level, same type → just emit the item
+            else {
+                # Same level, same type → close previous open item before new item
+                if ($list_stack[-1]{open_item}) {
+                    my $ic = $_item_close_tag->($list_type);
+                    $_emit_item_close->($_list_ind->($list_stack[-1]{indent}), $ic);
+                    $list_stack[-1]{open_item} = 0;
+                }
+            }
 
             $item_txt = doEscape($target, $item_txt);
             $item_txt = add_inline_tags($item_txt);
             $item_txt = $MASK->undo($item_txt);
 
-            my $open  = $TAGS{$list_type . 'ItemOpen'}  // '';
-            my $close = $TAGS{$list_type . 'ItemClose'} // '';
-            # Use stack-top indent (handles "bumped" items whose source indent
-            # doesn't match any valid nesting level)
-            push @ret, $list_stack[-1]{indent} . $open . $item_txt . $close;
+            my $eff_ind = $_list_ind->($list_stack[-1]{indent});
+            my $depth   = scalar @list_stack;
+            my $item_line;
+            if ($list_type eq 'deflist') {
+                my $dt_open  = $TAGS{deflistItem1Open}  // '';
+                my $dt_close = $TAGS{deflistItem1Close} // '';
+                my $dd_open  = $TAGS{deflistItem2Open}  // '';
+                $item_line = $eff_ind . $dt_open . $item_txt . $dt_close . $dd_open;
+            } else {
+                my $open    = $TAGS{$list_type . 'ItemOpen'} // '';
+                my $linepfx = $TAGS{$list_type . 'ItemLine'} // '';
+                if ($linepfx) {
+                    if ($rules{listlineafteropen}) {
+                        $open = $open . $linepfx x $depth;
+                    } else {
+                        $open = $linepfx x $depth . $open;
+                    }
+                }
+                if (($list_type eq 'list' && $rules{spacedlistitemopen}) ||
+                    ($list_type eq 'numlist' && $rules{spacednumlistitemopen})) {
+                    $open .= ' ';
+                }
+                # For numbered list without autonumber, substitute \a with count
+                if ($list_type eq 'numlist' && !$rules{autonumberlist}) {
+                    $list_stack[-1]{item_count} //= 0;
+                    $list_stack[-1]{item_count}++;
+                    my $n = $list_stack[-1]{item_count};
+                    $open =~ s/\\a/$n/g;
+                }
+                $item_line = $eff_ind . $open . $item_txt;
+            }
+            push @ret, $item_line;
+            $list_stack[-1]{open_item} = 1;
             next;
         }
 
         # ---- Continuation line inside a list ----------------------------
         if (@list_stack) {
-            if ($list_pending_blank && $rules{parainsidelist}) {
-                push @ret, $list_stack[-1]{indent}
-                         . ($TAGS{paragraphOpen}//'') . ($TAGS{paragraphClose}//'');
+            if ($list_pending_blank) {
+                if ($rules{parainsidelist}) {
+                    my $po = $TAGS{paragraphOpen}  // '';
+                    my $pc = $TAGS{paragraphClose} // '';
+                    if ($po || $pc) {
+                        my $top_ind = $_list_ind->($list_stack[-1]{indent});
+                        push @ret, $top_ind . $po . $pc;
+                    } else {
+                        push @ret, '';
+                    }
+                } else {
+                    push @ret, '';  # blank is content for non-parainsidelist targets
+                }
             }
             $list_pending_blank = 0;
             $line = doEscape($target, $line);
             $line = add_inline_tags($line);
             $line = $MASK->undo($line);
+            # Strip leading whitespace when keeplistindent=0 or deflist+deflisttextstrip
+            my $top_type = $list_stack[-1]{type} // '';
+            if (!$rules{keeplistindent} || ($top_type eq 'deflist' && $rules{deflisttextstrip})) {
+                $line =~ s/^\s+//;
+            }
+            # Apply deflistItem2LinePrefix for definition body lines
+            if ($top_type eq 'deflist' && $TAGS{deflistItem2LinePrefix}) {
+                $line = $TAGS{deflistItem2LinePrefix} . $line;
+            }
             push @ret, $line;
             next;
         }
@@ -668,6 +976,7 @@ sub convert {
             my $po = $TAGS{paragraphOpen} // '';
             push @ret, $po if $po;
             $BLOCK->blockin('para') unless $BLOCK->block;
+            $para_content_start = scalar @ret if $rules{onelinepara};
         }
         push @ret, $line;
     }
@@ -678,21 +987,39 @@ sub convert {
     # Close any remaining open quote levels
     if ($quote_depth > 0) {
         my $ti = ($rules{tagnotindentable} ? '' : "\t");
+        if ($rules{onelinequote} && defined $quote_oneline_buf) {
+            push @ret, $quote_oneline_buf;
+            $quote_oneline_buf = undef;
+        }
         for my $lv (reverse 1 .. $quote_depth) {
-            push @ret, ($ti x $lv) . ($TAGS{blockQuoteClose} // '');
+            my $qtag = $TAGS{blockQuoteClose} // '';
+            push @ret, ($ti x $lv) . $qtag if $qtag;
         }
         $quote_depth = 0;
         $BLOCK->last('quote');
         push @ret, '' if $rules{blanksaroundquote};
     }
 
-    # Close any remaining open block
+    # Close any remaining open block (para/verb/table) BEFORE sections
     if ($BLOCK->block) {
         my $closing_blk = $BLOCK->block;
         my $result = $BLOCK->blockout;
         push @ret, @$result;
+        if ($rules{onelinepara} && $closing_blk eq 'para' && $para_content_start >= 0) {
+            my @para_lines = splice(@ret, $para_content_start);
+            push @ret, join(' ', @para_lines) if @para_lines;
+            $para_content_start = -1;
+        }
         # Add trailing blank for block types that use blanksaroundXXX
         push @ret, '' if $rules{"blanksaround$closing_blk"};
+    }
+
+    # Close any remaining open sections (titleblocks targets like html5/htmls)
+    if ($rules{titleblocks} && @section_stack) {
+        while (@section_stack) {
+            my $lv = pop @section_stack;
+            push @ret, $TAGS{"title${lv}Close"} // '</section>';
+        }
     }
 
     # Apply final escapes

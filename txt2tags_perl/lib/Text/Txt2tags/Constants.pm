@@ -20,7 +20,7 @@ use constant HTML_LOWER  => 0;  # use lowercased HTML tags?
 # ---------------------------------------------------------------------------
 # Program information
 # ---------------------------------------------------------------------------
-our $MY_URL      = 'https://github.com/luginf/txt2tags-ports/';
+our $MY_URL      = 'http://txt2tags.org';
 our $MY_NAME     = 'txt2tags';
 our $MY_EMAIL    = 'verde@aurelio';
 our $MY_REVISION = '$Revision$';

@@ -69,8 +69,8 @@ use_ok 'Text::Txt2tags::Tags', 'getTags';
 # XHTML
 {
     my $t = getTags({ target => 'xhtml' });
-    is $t->{fontBoldOpen},   '<strong>', 'xhtml fontBoldOpen';
-    is $t->{fontItalicOpen}, '<em>',     'xhtml fontItalicOpen';
+    is $t->{fontBoldOpen},   '<b>', 'xhtml fontBoldOpen';
+    is $t->{fontItalicOpen}, '<i>', 'xhtml fontItalicOpen';
     is $t->{listItemOpen},   '<li>',     'xhtml listItemOpen';
     is $t->{listItemClose},  '</li>',    'xhtml listItemClose';
 }

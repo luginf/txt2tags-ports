@@ -63,20 +63,20 @@ sub doEscape {
     }
     elsif ($target eq 'lout') {
         $txt =~ s/\Q$ESCCHAR\E/$tmpmask/g;
-        $txt =~ s/"/"\Q$ESCCHAR\E""/g;
+        $txt =~ s/"/"${ESCCHAR}""/g;
         $txt =~ s/([|&{}\@#^~])/"$1"/g;
-        $txt =~ s/$tmpmask/"\Q$ESCCHAR$ESCCHAR\E"/g;
+        $txt =~ s/$tmpmask/"${ESCCHAR}${ESCCHAR}"/g;
     }
     elsif ($target =~ /^tex/) {
         $txt =~ s/\Q$ESCCHAR\E/$tmpmask/g;
-        $txt =~ s/([#\$&%{}])/\Q$ESCCHAR\E$1/g;
-        $txt =~ s/([~^])/\Q$ESCCHAR\E$1\{\}/g;
+        $txt =~ s/([#\$&%{}])/${ESCCHAR}$1/g;
+        $txt =~ s/([~^])/${ESCCHAR}$1\{\}/g;
         $txt =~ s/([<|>])/\$$1\$/g;
         $txt =~ s/$tmpmask/maskEscapeChar('$\\backslash$')/ge;
     }
     elsif ($target eq 'rtf') {
         $txt =~ s/\Q$ESCCHAR\E/$ESCCHAR$ESCCHAR/g;
-        $txt =~ s/([{}])/\Q$ESCCHAR\E$1/g;
+        $txt =~ s/([{}])/${ESCCHAR}$1/g;
     }
     return $txt;
 }
@@ -199,6 +199,8 @@ sub enclose_me {
 sub get_tagged_link {
     my ($label, $url) = @_;
 
+    my $target = $CONF{target} // '';
+
     my $is_email = ($url =~ /^[\w.+-]+\@[\w.-]+\.[A-Za-z]{2,4}/);
     my $is_img   = ($url =~ /\.(png|jpe?g|gif|eps|bmp|svg)$/i);
 
@@ -232,8 +234,17 @@ sub get_tagged_link {
         $url = $proto . $url;
     }
 
-    # HTML-escape & in URLs (for HTML targets)
-    (my $url_esc = $url) =~ s/&/&amp;/g;
+    # Escape specials in URL (Python: if not linkable or escapeurl)
+    # doEscape handles & → &amp; for escapexmlchars targets (HTML etc.)
+    if (!$rules{linkable} || $rules{escapeurl}) {
+        $url = doEscape($target, $url);
+    }
+
+    # Escape specials in label text (Python always does this)
+    $label = doEscape($target, $label) if $label;
+
+    # Use the (already-escaped) url directly for href
+    my $url_esc = $url;
 
     # Display: label if given, else original URL text (no added proto)
     my $display;
@@ -252,18 +263,30 @@ sub get_tagged_link {
                 $display = $label;
             }
         } else {
-            (my $l = $label) =~ s/&/&amp;/g;
-            $display = $l;
+            $display = $label;  # already escaped by doEscape above
         }
     } else {
-        (my $o = $orig_url) =~ s/&/&amp;/g;
-        $display = $o;
+        # No label: display the original URL (without added protocol)
+        # Escape it the same way as the URL
+        my $disp_url = $orig_url;
+        if (!$rules{linkable} || $rules{escapeurl}) {
+            $disp_url = doEscape($target, $disp_url);
+        }
+        $display = $disp_url;
     }
 
-    # The tag template has \a placeholders: first \a → URL, second \a → display text
+    # Substitution order: labelbeforelink OR non-linkable target → label first, URL second
+    my ($first_val, $second_val);
+    if ($label && ($rules{labelbeforelink} || !$rules{linkable})) {
+        $first_val  = $display;
+        $second_val = $url_esc;
+    } else {
+        $first_val  = $url_esc;
+        $second_val = $display;
+    }
     my $result = $open_tag;
     my $first  = 1;
-    $result =~ s/\\a/$first ? do { $first = 0; $url_esc } : $display/ge;
+    $result =~ s/\\a/$first ? do { $first = 0; $first_val } : $second_val/ge;
 
     return $result;
 }
@@ -536,72 +559,406 @@ sub toc_formatter {
 my %HEADER_TEMPLATE = (
     html => 'DYNAMIC_HTML',
     xhtml => <<'END_XHTML',
-<?xml version="1.0" encoding="%(ENCODING)s"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
-  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<?xml version="1.0"
+      encoding="%(ENCODING)s"
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-<meta name="generator" content="http://txt2tags.org"/>
-<meta http-equiv="Content-Type" content="text/html; charset=%(ENCODING)s"/>
-<link rel="stylesheet" type="text/css" href="%(STYLE)s"/>
 <title>%(HEADER1)s</title>
+<meta name="generator" content="http://txt2tags.org" />
+<link rel="stylesheet" type="text/css" href="%(STYLE)s" />
 </head>
-<body>
-
-<div class="header" id="header">
+<body bgcolor="white" text="black">
+<div align="center">
 <h1>%(HEADER1)s</h1>
 <h2>%(HEADER2)s</h2>
 <h3>%(HEADER3)s</h3>
 </div>
 END_XHTML
+    xhtmls => <<'END_XHTMLS',
+<?xml version="1.0"
+      encoding="%(ENCODING)s"
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>%(HEADER1)s</title>
+<meta name="generator" content="http://txt2tags.org" />
+<link rel="stylesheet" type="text/css" href="%(STYLE)s" />
+<style type="text/css">body {background-color:#FFFFFF ; color:#000000}</style>
+</head>
+<body>
+<div style="text-align:center">
+<h1>%(HEADER1)s</h1>
+<h2>%(HEADER2)s</h2>
+<h3>%(HEADER3)s</h3>
+</div>
+END_XHTMLS
     html5 => <<'END_HTML5',
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="%(ENCODING)s"/>
-<meta name="generator" content="http://txt2tags.org"/>
-<link rel="stylesheet" href="%(STYLE)s"/>
+<meta charset="%(ENCODING)s">
 <title>%(HEADER1)s</title>
+<meta name="generator" content="http://txt2tags.org">
+<link rel="stylesheet" href="%(STYLE)s">
+<style>
+body{background-color:#fff;color:#000;}
+hr{background-color:#000;border:0;color:#000;}
+hr.heavy{height:5px;}
+hr.light{height:1px;}
+img{border:0;display:block;}
+img.right{margin:0 0 0 auto;}
+img.center{border:0;margin:0 auto;}
+table th,table td{padding:4px;}
+.center,header{text-align:center;}
+table.center {margin-left:auto; margin-right:auto;}
+.right{text-align:right;}
+.left{text-align:left;}
+.tableborder,.tableborder td,.tableborder th{border:1px solid #000;}
+.underline{text-decoration:underline;}
+</style>
 </head>
 <body>
 <header>
 <hgroup>
 <h1>%(HEADER1)s</h1>
 <h2>%(HEADER2)s</h2>
+<h3>%(HEADER3)s</h3>
 </hgroup>
 </header>
 <article>
 END_HTML5
+    htmls => <<'END_HTMLS',
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="%(ENCODING)s">
+<title>%(HEADER1)s</title>
+<meta name="generator" content="http://txt2tags.org">
+<link rel="stylesheet" href="%(STYLE)s">
+<style>
+body{background-color:#fff;color:#000;}
+hr{background-color:#000;border:0;color:#000;}
+hr.heavy{height:5px;}
+hr.light{height:1px;}
+img{border:0;display:block;}
+img.right{margin:0 0 0 auto;}
+table,img.center{border:0;margin:0 auto;}
+table th,table td{padding:4px;}
+.center,header{text-align:center;}
+.right{text-align:right;}
+.tableborder,.tableborder td,.tableborder th{border:1px solid #000;}
+.underline{text-decoration:underline;}
+</style>
+</head>
+<body>
+<article>
+END_HTMLS
     txt => '%(HEADER1)s
 %(HEADER2)s
-%(HEADER3)s',
+%(HEADER3)s
+',
     tex => <<'END_TEX',
 \documentclass{article}
-%(ENCODING)s
 \usepackage{graphicx}
-\begin{document}
+\usepackage{paralist} %% needed for compact lists
+\usepackage[normalem]{ulem} %% needed by strike
+\usepackage[urlcolor=blue,colorlinks=true]{hyperref}
+\usepackage[%(ENCODING)s]{inputenc}  %% char encoding
+\usepackage{%(STYLE)s}  %% user defined
+
 \title{%(HEADER1)s}
 \author{%(HEADER2)s}
+\begin{document}
 \date{%(HEADER3)s}
 \maketitle
 \clearpage
 END_TEX
-    man => '.TH "%(HEADER1)s" 1 "%(HEADER3)s" "%(HEADER2)s"',
+    man => ".TH \"%(HEADER1)s\" 1 \"%(HEADER3)s\" \"%(HEADER2)s\"\n",
     rst => '',
-    md  => '',
-    adoc=> '',
+    md  => "%(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
+    adoc=> "= %(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
+    sgml => <<'END_SGML',
+<!doctype linuxdoc system>
+<article>
+<title>%(HEADER1)s
+<author>%(HEADER2)s
+<date>%(HEADER3)s
+END_SGML
+    dbk => <<'END_DBK',
+<?xml version="1.0"
+      encoding="%(ENCODING)s"
+?>
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "docbook/dtd/xml/4.5/docbookx.dtd">
+<article lang="en">
+  <articleinfo>
+    <title>%(HEADER1)s</title>
+    <authorgroup>
+      <author><othername>%(HEADER2)s</othername></author>
+    </authorgroup>
+    <date>%(HEADER3)s</date>
+  </articleinfo>
+END_DBK
+    lout => <<'END_LOUT',
+@SysInclude { doc }
+@SysInclude { tbl }
+@Document
+  @InitialFont { Times Base 12p }  # Times, Courier, Helvetica, ...
+  @PageOrientation { Portrait }    # Portrait, Landscape
+  @ColumnNumber { 1 }              # Number of columns (2, 3, ...)
+  @PageHeaders { Simple }          # None, Simple, Titles, NoTitles
+  @InitialLanguage { English }     # German, French, Portuguese, ...
+  @OptimizePages { Yes }           # Yes/No smart page break feature
+//
+@Text @Begin
+@Display @Heading { %(HEADER1)s }
+@Display @I { %(HEADER2)s }
+@Display { %(HEADER3)s }
+#@NP                               # Break page after Headers
+END_LOUT
+    moin => "'''%(HEADER1)s'''\n\n''%(HEADER2)s''\n\n%(HEADER3)s\n",
+    gwiki => "*%(HEADER1)s*\n\n%(HEADER2)s\n\n_%(HEADER3)s_\n",
+    doku => "===== %(HEADER1)s =====\n\n**//%(HEADER2)s//**\n\n//%(HEADER3)s//\n",
+    pmw => "(:Title %(HEADER1)s:)\n\n(:Description %(HEADER2)s:)\n\n(:Summary %(HEADER3)s:)\n",
+    wiki => "'''%(HEADER1)s'''\n\n%(HEADER2)s\n\n''%(HEADER3)s''\n",
+    red => "h1. %(HEADER1)s\n\nAuthor: %(HEADER2)s\nDate: %(HEADER3)s\n",
+    vimwiki => "%%title %(HEADER1)s\n## by %(HEADER2)s in %(HEADER3)s\n%%toc %(HEADER1)s\n",
+    mgp => <<'END_MGP',
+#!/usr/X11R6/bin/mgp -t 90
+%%deffont "normal"    xfont  "utopia-medium-r", charset "iso8859-1"
+%%deffont "normal-i"  xfont  "utopia-medium-i", charset "iso8859-1"
+%%deffont "normal-b"  xfont  "utopia-bold-r"  , charset "iso8859-1"
+%%deffont "normal-bi" xfont  "utopia-bold-i"  , charset "iso8859-1"
+%%deffont "mono"      xfont "courier-medium-r", charset "iso8859-1"
+%%default 1 size 5
+%%default 2 size 8, fore "yellow", font "normal-b", center
+%%default 3 size 5, fore "white",  font "normal", left, prefix "  "
+%%tab 1 size 4, vgap 30, prefix "     ", icon arc "red" 40, leftfill
+%%tab 2 prefix "            ", icon arc "orange" 40, leftfill
+%%tab 3 prefix "                   ", icon arc "brown" 40, leftfill
+%%tab 4 prefix "                          ", icon arc "darkmagenta" 40, leftfill
+%%tab 5 prefix "                                ", icon arc "magenta" 40, leftfill
+%%%%------------------------- end of headers -----------------------------
+%%page
+
+
+
+
+%%size 10, center, fore "yellow"
+%(HEADER1)s
+
+%%font "normal-i", size 6, fore "white", center
+%(HEADER2)s
+
+%%font "mono", size 7, center
+%(HEADER3)s
+END_MGP
+    utmac => <<'END_UTMAC',
+\
+.DT "%(HEADER1)s"
+.DA "%(HEADER2)s"
+.DI "%(HEADER3)s"
+.H1 "%(HEADER1)s"
+.H* "%(HEADER2)s"
+.
+.\\" txt2tags shortcuts
+.ds url \\W'\\\\$2'\\\\$1\\W
+.ds mail \\W'mailto:\\\\$2'\\\\$1\\W
+.ds underl \\Z'\\\\$*'\\v'.25m'\\l"\\w'\\\\$*'u"\\v'-.25m'
+.ds strike \\Z'\\\\$*'\\v'-.25m'\\l"\w'\\\\$*'u"\\v'.25m'
+.\\"ds underl \\X'SetColor blue'\\\\$1\\X'SetColor black'
+.\\"ds strike \\X'SetColor red'\\\\$1\\X'SetColor black'
+.\
+END_UTMAC
+    pm6 => <<'END_PM6',
+<PMTags1.0 win><C-COLORTABLE ("Preto" 1 0 0 0)
+><@Normal=
+  <FONT "Times New Roman"><CCOLOR "Preto"><SIZE 11>
+  <HORIZONTAL 100><LETTERSPACE 0><CTRACK 127><CSSIZE 70><C+SIZE 58.3>
+  <C-POSITION 33.3><C+POSITION 33.3><P><CBASELINE 0><CNOBREAK 0><CLEADING -0.05>
+  <GGRID 0><GLEFT 7.2><GRIGHT 0><GFIRST 0><G+BEFORE 7.2><G+AFTER 0>
+  <GALIGNMENT "justify"><GMETHOD "proportional"><G& "ENGLISH">
+  <GPAIRS 12><G%% 120><GKNEXT 0><GKWIDOW 0><GKORPHAN 0><GTABS $>
+  <GHYPHENATION 2 34 0><GWORDSPACE 75 100 150><GSPACE -5 0 25>
+><@Bullet=<@-PARENT "Normal"><FONT "Abadi MT Condensed Light">
+  <GLEFT 14.4><G+BEFORE 2.15><G%% 110><GTABS(25.2 l "")>
+><@PreFormat=<@-PARENT "Normal"><FONT "Lucida Console"><SIZE 8><CTRACK 0>
+  <GLEFT 0><G+BEFORE 0><GALIGNMENT "left"><GWORDSPACE 100 100 100><GSPACE 0 0 0>
+><@Title1=<@-PARENT "Normal"><FONT "Arial"><SIZE 14><B>
+  <GCONTENTS><GLEFT 0><G+BEFORE 0><GALIGNMENT "left">
+><@Title2=<@-PARENT "Title1"><SIZE 12><G+BEFORE 3.6>
+><@Title3=<@-PARENT "Title1"><SIZE 10><GLEFT 7.2><G+BEFORE 7.2>
+><@Title4=<@-PARENT "Title3">
+><@Title5=<@-PARENT "Title3">
+><@Quote=<@-PARENT "Normal"><SIZE 10><I>>
+
+%(HEADER1)s
+%(HEADER2)s
+%(HEADER3)s
+END_PM6
+    creole => "%(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
+    gmi => "# %(HEADER1)s\n# %(HEADER2)s\n# %(HEADER3)s\n",
+    bbcode => "%(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
+    spip => "{{{%(HEADER1)s}}}\n\n{{%(HEADER2)s}}\n\n{%(HEADER3)s}\n\n",
+    tml => "---+!! %(HEADER1)s\n*%(HEADER2)s* %%BR%% __%(HEADER3)s__\n",
 );
 
-# Alias templates
-$HEADER_TEMPLATE{xhtmls} = $HEADER_TEMPLATE{xhtml};
-$HEADER_TEMPLATE{htmls}  = $HEADER_TEMPLATE{html};
-$HEADER_TEMPLATE{wp}     = '';
+# RTF template — stored separately due to backslash complexity
+$HEADER_TEMPLATE{rtf} = <<'END_RTF';
+{\rtf1\ansi\ansicpg1252\deff0
+{\fonttbl
+{\f0\froman Times;}
+{\f1\fswiss Arial;}
+{\f2\fmodern Courier;}
+}
+{\colortbl;\red0\green0\blue255;}
+{\stylesheet
+{\s1\sbasedon222\snext1\f0\fs24\cf0 Normal;}
+{\s2\sbasedon1\snext2{\*\txttags paragraph}\f0\fs24\qj\sb0\sa0\sl480\slmult1\li0\ri0\fi360 Body Text;}
+{\s3\sbasedon2\snext3{\*\txttags verbatim}\f2\fs20\ql\sb0\sa240\sl240\slmult1\li720\ri720\fi0 Verbatim;}
+{\s4\sbasedon2\snext4{\*\txttags quote}\f0\fs24\qj\sb0\sa0\sl480\slmult1\li720\ri720\fi0 Block Quote;}
+{\s10\sbasedon1\snext10\keepn{\*\txttags maintitle}\f1\fs24\qc\sb0\sa0\sl480\slmult1\li0\ri0\fi0 Title;}
+{\s11\sbasedon1\snext2\keepn{\*\txttags title1}\f1\fs24\qc\sb240\sa240\sl480\slmult1\li0\ri0\fi0\b Heading 1;}
+{\s12\sbasedon11\snext2\keepn{\*\txttags title2}\f1\fs24\ql\sb240\sa240\sl480\slmult1\li0\ri0\fi0\b Heading 2;}
+{\s13\sbasedon11\snext2\keepn{\*\txttags title3}\f1\fs24\ql\sb240\sa240\sl480\slmult1\li360\ri0\fi0\b Heading 3;}
+{\s14\sbasedon11\snext2\keepn{\*\txttags title4}\f1\fs24\ql\sb240\sa240\sl480\slmult1\li360\ri0\fi0\b\i Heading 4;}
+{\s15\sbasedon11\snext2\keepn{\*\txttags title5}\f1\fs24\ql\sb240\sa240\sl480\slmult1\li360\ri0\fi0\i Heading 5;}
+{\s21\sbasedon2\snext21{\*\txttags list}\f0\fs24\qj\sb0\sa0\sl480\slmult1{\*\txttags list indent}\li720\ri0\fi-360 List;}
+}
+{\*\listtable
+{\list\listtemplateid1
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li720\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li1080\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li1440\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li1800\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li2160\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li2520\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li2880\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li3240\ri0\fi-360}
+{\listlevel\levelnfc23\leveljc0\levelstartat1\levelfollow0{\leveltext \'01\'95;}{\levelnumbers;}{\*\txttags list indent}\li3600\ri0\fi-360}
+\listid1}
+{\list\listtemplateid2
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'00.;}{\levelnumbers\'01;}{\*\txttags list indent}\li720\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'01.;}{\levelnumbers\'01;}{\*\txttags list indent}\li1080\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'02.;}{\levelnumbers\'01;}{\*\txttags list indent}\li1440\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'03.;}{\levelnumbers\'01;}{\*\txttags list indent}\li1800\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'04.;}{\levelnumbers\'01;}{\*\txttags list indent}\li2160\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'05.;}{\levelnumbers\'01;}{\*\txttags list indent}\li2520\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'06.;}{\levelnumbers\'01;}{\*\txttags list indent}\li2880\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'07.;}{\levelnumbers\'01;}{\*\txttags list indent}\li3240\ri0\fi-360}
+{\listlevel\levelnfc0\leveljc0\levelstartat1\levelfollow0{\leveltext \'02\'08.;}{\levelnumbers\'01;}{\*\txttags list indent}\li3600\ri0\fi-360}
+\listid2}
+{\list\listtemplateid3
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'02\'00.;}{\levelnumbers\'01;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'04\'00.\'01.;}{\levelnumbers\'01\'03;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'06\'00.\'01.\'02.;}{\levelnumbers\'01\'03\'05;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'08\'00.\'01.\'02.\'03.;}{\levelnumbers\'01\'03\'05\'07;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'10\'00.\'01.\'02.\'03.\'04.;}{\levelnumbers\'01\'03\'05\'07\'09;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'02\'05.;}{\levelnumbers\'01;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'02\'06.;}{\levelnumbers\'01;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow1{\leveltext \'02\'07.;}{\levelnumbers\'01;}}
+{\listlevel\levelnfc0\leveljc1\levelstartat1\levelfollow0{\leveltext \'02\'08.;}{\levelnumbers\'01;}}
+\listid3}
+}
+{\listoverridetable
+{\listoverride\listid1\listoverridecount0\ls1}
+{\listoverride\listid2\listoverridecount0\ls2}
+{\listoverride\listid3\listoverridecount0\ls3}
+}
+{\info
+{\title %(HEADER1)s }
+{\author %(HEADER2)s }
+}
+\deflang1033\widowctrl\hyphauto\uc1\fromtext
+END_RTF
+
+# mom template
+$HEADER_TEMPLATE{mom} = <<'END_MOM';
+\
+\# Cover and title
+.TITLE "%(HEADER1)s"
+.AUTHOR "%(HEADER2)s"
+\#.DOCTITLE \" ONLY to collate different files (sections, chapters etc.)
+.SUBTITLE "%(HEADER3)s"
+\#
+\# printstyle: typeset or typewrite it's MANDATORY!
+.PRINTSTYLE TYPESET
+\#.PRINTSTYLE TYPEWRITE
+\#
+\# doctype: default, chapter, user-defined, letter (commented is "default")
+\#.DOCTYPE DEFAULT
+\#
+\# copystyle: draft or final
+.COPYSTYLE FINAL
+\#.COPYSTYLE DRAFT
+\#
+\# Default values for some strings
+\# They're valid in every printstyle or copystyle
+\# Here are MY defaults (italian)
+\# For a more general use I think they should be groff commented
+\#
+\#.CHAPTER_STRING "Capitolo"
+\#.ATTRIBUTE_STRING "di"
+\#.TOC_HEADER_STRING "Indice"
+\#.ENDNOTE_TITLE "Note"
+\#
+\# section break char "#" for 1 time (LINEBREAK)
+\#.LINEBREAK_CHAR # 1
+\# a null end string
+.FINIS_STRING ""
+\#
+\# Typesetting values
+\# These are all MY preferences! Comment out for default.
+\#
+.PAPER A4
+\# Left margin (c=centimeters)
+\#.L_MARGIN 2.8c
+\# Length of line (it's for 62 chars a line for point size 12 in typewrite style)
+\#.LL 15.75c
+\# Palatino groff font, better than Times for reading. IMHO
+.FAMILY P
+.PT_SIZE 12
+\# line spacing
+.LS 18
+\# left aligned (mom macro defaults to "both aligned")
+.QUAD L
+\# No hyphenation
+.HY OFF
+\# Header and footer sizes
+.HEADER_SIZE -1
+.FOOTER_SIZE -1
+.PAGENUM_SIZE -2
+\#
+\# Other options
+\#
+\# Indent space for "quote" and "blockquote" (defaults are good too!)
+\#.QUOTE_INDENT 2
+\#.BLOCKQUOTE_INDENT 2
+\#
+\# Footnotes
+\#
+\# Next gives you superscript numbers (use STAR for symbols, it's default)
+\# use additional argument NO_SUPERSCRIPT for typewrite printstyle
+\#.FOOTNOTE_MARKER_STYLE NUMBER
+\# Cover title at about 1/3 from top
+\#.DOCHEADER_ADVANCE 7.5c
+\#
+\# Double quotes italian style! aka << and >> It works only for "typeset" printstyle
+\#.SMARTQUOTES IT
+\# Next cmd is MANDATORY.
+.START
+END_MOM
+
+# Additional aliases/defaults
+$HEADER_TEMPLATE{wp} = "%(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n";
 
 sub _doHeader_html {
     my ($headers, $config) = @_;
 
     my ($h1, $h2, $h3) = map { $_ // '' } @{$headers}[0, 1, 2];
-    my $enc   = get_encoding_string($config->{encoding} // '', 'html') // '';
+    my $enc   = $config->{encoding} // '';
     my $style = ($config->{style} && @{ $config->{style} })
                     ? $config->{style}[0] : '';
 
@@ -614,14 +971,14 @@ sub _doHeader_html {
         if $enc;
     push @head, "<LINK REL=\"stylesheet\" TYPE=\"text/css\" HREF=\"$style\">"
         if $style;
-    # v2 format: </HEAD><BODY on same line, BGCOLOR/TEXT attributes
+    push @head, "<TITLE>$h1</TITLE>" if $h1;
     push @head, '</HEAD><BODY BGCOLOR="white" TEXT="black">';
     push @head, '<CENTER>';
     push @head, "<H1>$h1</H1>" if $h1;
-    push @head, "<H2>$h2</H2>" if $h2;
-    push @head, "<H3>$h3</H3>" if $h3;
+    push @head, "<FONT SIZE=\"4\"><I>$h2</I></FONT><BR>" if $h2;
+    push @head, "<FONT SIZE=\"4\">$h3</FONT>" if $h3;
     push @head, '</CENTER>';
-    push @head, '';   # trailing blank matching Python v2 template
+    push @head, '';
 
     return @head;
 }
@@ -629,8 +986,28 @@ sub _doHeader_html {
 sub _build_head_data {
     my ($headers, $config) = @_;
     my $target = $config->{target};
+    my $enc = $config->{encoding} // '';
+    # Normalize encoding name for targets that need it (Python get_encoding_string)
+    if ($enc && $target =~ /^tex/) {
+        my %tex_enc = (
+            'utf-8'       => 'utf8',
+            'us-ascii'    => 'ascii',
+            'windows-1250'=> 'cp1250',
+            'windows-1252'=> 'cp1252',
+            'ibm850'      => 'cp850',
+            'ibm852'      => 'cp852',
+            'iso-8859-1'  => 'latin1',
+            'iso-8859-2'  => 'latin2',
+            'iso-8859-3'  => 'latin3',
+            'iso-8859-4'  => 'latin4',
+            'iso-8859-5'  => 'latin5',
+            'iso-8859-9'  => 'latin9',
+            'koi8-r'      => 'koi8-r',
+        );
+        $enc = $tex_enc{lc $enc} // $enc;
+    }
     my %d = (
-        ENCODING => $config->{encoding} // '',
+        ENCODING => $enc,
         STYLE    => '',
         HEADER1  => $headers->[0] // '',
         HEADER2  => $headers->[1] // '',
@@ -658,6 +1035,7 @@ sub _apply_tmpl {
             }
         }
         $line =~ s/%\((\w+)\)s/$head_data{$1} \/\/ ''/ge;
+        $line =~ s/%%/%/g;   # Python %% → % literal (after %(KEY)s substitution)
         push @out, $line;
     }
     return \@out;
@@ -703,15 +1081,13 @@ sub doHeader {
         return $config->{fullBody};
     }
 
-    # Append body + EOD to built-in template
-    $tmpl_str .= "%(BODY)s\n";
-    if ($TAGS{EOD}) {
-        (my $eod = $TAGS{EOD}) =~ s/%/%%/g;
-        $tmpl_str .= "$eod\n";
-    }
-
+    # Apply template (header section only), then directly concatenate body + EOD
     my %head_data = _build_head_data($headers, $config);
-    return _apply_tmpl($tmpl_str, %head_data);
+    my $header_lines = _apply_tmpl($tmpl_str, %head_data);
+    my @result = @$header_lines;
+    push @result, @{ $config->{fullBody} // [] };
+    push @result, $TAGS{EOD} if $TAGS{EOD};
+    return \@result;
 }
 
 # ---------------------------------------------------------------------------
