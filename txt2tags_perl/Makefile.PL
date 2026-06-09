@@ -2,6 +2,20 @@ use strict;
 use warnings;
 use ExtUtils::MakeMaker;
 
+{
+    package MY;
+    sub postamble {
+        return <<'MAKE_FRAG';
+bundle: txt2tags.pl
+
+txt2tags.pl: bundle.pl bin/txt2tags $(wildcard lib/Text/Txt2tags/*.pm) lib/Text/Txt2tags.pm
+	$(PERL) bundle.pl > txt2tags.pl
+	chmod +x txt2tags.pl
+
+MAKE_FRAG
+    }
+}
+
 WriteMakefile(
     NAME             => 'Text::Txt2tags',
     AUTHOR           => 'luginf',
