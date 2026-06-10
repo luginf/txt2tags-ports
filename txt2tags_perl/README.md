@@ -12,5 +12,7 @@ I managed to save and try to maintain a python3 version ported by Jan Max Meyer,
 
 Perl is far more conservative.
 
-This port is not complete yet.
+This port should be complete now and similar to the python version.
+
+
 
