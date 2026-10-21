@@ -47,7 +47,7 @@ Rust, Lua and Tcl ports support.
 Pick whichever form suits you; all of them take the same options.
 
 | Form |Command|
-|---------------|
+|---|---|
 |Python single file |`python3 txt2tags.py -t html file.t2t`|
 |Python package |`python3 -m txt2tags3_mod -t html file.t2t`|
 |Perl single file |`perl txt2tags.pl -t html file.t2t`|
@@ -366,7 +366,7 @@ ignores it for one run.
 Run `txt2tags --targets` for the exact list of your version.
 
 | Family |Targets|
-|---------------|
+|---|---|
 |Web |html, html5, xhtml, xhtmls, htmls, wp|
 |Wiki |md, rst, adoc, bbcode, creole, doku, gmi, gwiki, moin, pmw, red, spip, tml, vimwiki, wiki, txt2t|
 |Office |tex, texs, dbk, sgml, rtf, lout, mgp, mom, pm6, utmac, csv, csvs, ods, db|

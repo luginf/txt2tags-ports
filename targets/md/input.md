@@ -104,14 +104,14 @@ A local anchor link: [Introduction](#level-1-title)
 ### Table With Header 
 
 | head 1 |head 2 |head 3|
-|---------------|
+|---|---|---|
 |cell 1 |cell 2 |cell 3|
 |cell 4 |cell 5 |cell 6|
 
 ### Aligned Table 
 
 | Name |Age |City|
-|---------------|
+|---|---|---|
 |Alice |30 |Paris|
 |Bob |25 |Lyon|
 |Charlotte |35 |Marseille|

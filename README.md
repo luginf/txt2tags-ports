@@ -21,7 +21,8 @@ The single files are generated from the modular sources:
 
 ## Documentation
 
-The manual is in [`docs/`](docs/): [Markdown](docs/manual.md), [HTML](docs/manual.html)
+The manual is published at https://luginf.github.io/txt2tags-ports/ and lives in
+[`docs/`](docs/): [Markdown](docs/manual.md) (readable on GitHub), [HTML](docs/index.html)
 and its source [`manual.t2t`](docs/manual.t2t) (built with `-t html5` / `-t md`).
 Markup syntax, config lines, command line, targets, and what each port supports.
 

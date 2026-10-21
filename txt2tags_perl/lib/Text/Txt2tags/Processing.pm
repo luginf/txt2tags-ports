@@ -805,6 +805,8 @@ sub parse_row {
         $row_open  = $TAGS{tableTitleRowOpen}  // '';
         $row_close = $TAGS{tableTitleRowClose} // '';
         $cell_sep  = $TAGS{tableTitleCellSep}  // '';
+        # GFM needs one "---" separator cell per header cell
+        $row_close = "|\n|" . ('---|' x scalar(@cells)) if ($CONF{target} // '') eq 'md';
     } else {
         $row_open  = $TAGS{tableRowOpen}  // '';
         $row_close = $TAGS{tableRowClose} // '';

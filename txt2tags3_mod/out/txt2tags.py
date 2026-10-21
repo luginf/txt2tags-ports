@@ -6541,6 +6541,9 @@ class TableMaster:
             for rowdata in rows:
                 if rowdata["title"]:
                     o, c = titrowopen, titrowclose
+                    if state.TARGET == "md":
+                        # GFM needs one "---" separator cell per header cell
+                        c = "|\n|" + "---|" * len(rowdata["cellspan"])
                 else:
                     o, c = rowopen, rowclose
                 row = tagged_cells.pop(0)
