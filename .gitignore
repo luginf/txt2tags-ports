@@ -3,3 +3,19 @@ __pycache__/
 dist/
 *.egg-info/
 .venv/
+
+# Scratch / old copies
+/txt2tags2
+/txt2tags_perl-2026-04-08/
+
+# Example and conversion outputs at the repo root
+/sample.*
+/*.csv
+/*.csvs
+
+# txt2tags_perl: MakeMaker build artifacts and sample outputs
+/txt2tags_perl/blib/
+/txt2tags_perl/MYMETA.*
+/txt2tags_perl/pm_to_blib
+/txt2tags_perl/description-pak
+/txt2tags_perl/sample*

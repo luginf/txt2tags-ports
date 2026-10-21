@@ -1,0 +1,20 @@
+[package]
+name = "txt2tags"
+version = "0.1.0"
+edition = "2021"
+description = "Rust port of txt2tags (simple tier + first advanced-tier pass)"
+
+[[bin]]
+name = "txt2tags"
+path = "src/bin/txt2tags.rs"
+
+[lib]
+name = "txt2tags"
+path = "src/lib.rs"
+
+[dependencies]
+# Only pulled in for the advanced-tier %!preproc/%!postproc directives,
+# which are inherently regex-driven (see the repo's CLAUDE.md "Scope
+# policy" section). Everything else in this crate still parses with plain
+# substring search, matching the simple-tier "no regex" rule.
+regex = "1"
