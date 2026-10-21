@@ -24,7 +24,7 @@ sub getRegexes {
         login  => q{[A-Za-z0-9_.-]},
         pass   => q{[^ @]*},
         chars  => q{[A-Za-z0-9%._/~:,=$@&+\-]},
-        anchor => q{[A-Za-z0-9%._\-]},
+        anchor => q{[\w%.\-]},
         form   => q{[A-Za-z0-9/%&=+:;.,$@*_\-]},
         punct  => q{[.,;:!?]},
     );
@@ -74,14 +74,14 @@ sub getRegexes {
         '1lineTagged'    => qr/^''' (?=.)/,
 
         # Inline font marks – greedy, glued (no boundary spaces)
-        fontMono         => qr/``([^\s](?:.*?[^\s])?`*)``/,
-        raw              => qr/""([^\s](?:.*?[^\s])?"*)""/,
-        tagged           => qr/''([^\s](?:.*?[^\s])?'*)''/ ,
-        math             => qr/\$\$([^\s](?:.*?[^\s])?\$*)\$\$/,
-        fontBold         => qr/\*\*([^\s](?:.*?[^\s])?\**)\*\*/,
-        fontItalic       => qr|//([^\s](?:.*?[^\s])?/*)//|,
-        fontUnderline    => qr/__([^\s](?:.*?[^\s])?_*)__/,
-        fontStrike       => qr/--([^\s](?:.*?[^\s])?-*)--/,
+        fontMono         => qr/``([^\s](?:|.*?[^\s])`*)``/,
+        raw              => qr/""([^\s](?:|.*?[^\s])"*)""/,
+        tagged           => qr/''([^\s](?:|.*?[^\s])'*)''/ ,
+        math             => qr/\$\$([^\s](?:|.*?[^\s])\$*)\$\$/,
+        fontBold         => qr/\*\*([^\s](?:|.*?[^\s])\**)\*\*/,
+        fontItalic       => qr{//([^\s](?:|.*?[^\s])/*)//},
+        fontUnderline    => qr/__([^\s](?:|.*?[^\s])_*)__/,
+        fontStrike       => qr/--([^\s](?:|.*?[^\s])-*)--/,
 
         # Lists
         list             => qr/^( *)(-) (?=[^ ])/,
@@ -115,7 +115,7 @@ sub getRegexes {
     );
 
     # Italic regex: // needs special care to avoid URL confusion
-    $bank{fontItalic} = qr{//([^\s](?:.*?[^\s])?/*)//};
+    $bank{fontItalic} = qr{//([^\s](?:|.*?[^\s])/*)//};
 
     # Macro pattern  %%macroname[(fmt)]
     $bank{macros} = qr/%%(?<name>$macro_names)\b(?:\((?<fmt>.*?)\))?/i;

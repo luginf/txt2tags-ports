@@ -6,6 +6,8 @@ VERBOSE = 0    # -v/-vv/-vvv
 QUIET = 0      # --quiet
 GUI = 0        # --gui
 
+AUTOTOC = 1    # 0 once a %%toc macro was found: the TOC then goes where the user put it
+
 RC_RAW = []
 CMDLINE_RAW = []
 CONF = {}

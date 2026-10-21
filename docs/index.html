@@ -126,6 +126,9 @@ Rust, Lua and Tcl ports support.
 <p>
 Pick whichever form suits you; all of them take the same options.
 </p>
+<p>
+You can get them at <a href="https://github.com/luginf/txt2tags-ports">https://github.com/luginf/txt2tags-ports</a>
+</p>
 
 <table class="tableborder">
 <tr>
@@ -152,7 +155,7 @@ Pick whichever form suits you; all of them take the same options.
 
 <p>
 The single files <code>txt2tags.py</code> and <code>txt2tags.pl</code> are attached to each
-GitHub release. They have no dependency besides Python 3 or Perl 5. Both are
+<a href="https://github.com/luginf/txt2tags-ports/releases">GitHub release</a>. They have no dependency besides Python 3 or Perl 5. Both are
 generated: <code>python3 txt2tags3_mod/bundle.py</code> writes
 <code>txt2tags3_mod/out/txt2tags.py</code> and <code>perl txt2tags_perl/bundle.pl</code> writes
 <code>txt2tags_perl/out/txt2tags.pl</code>.
@@ -298,8 +301,8 @@ also closes an open list (see <a href="#lists">Lists</a>).
 </table>
 
 <p>
-Marks must hug their text: <code>** not bold **</code> is left alone, and a mark glued
-to a word on the outside (<code>2**3**4</code>) is not markup either. Marks can be
+Marks must hug their text: <code>** not bold **</code> is left alone. What sits
+outside a mark does not matter (<code>a--b--c</code> has a struck b). Marks can be
 combined (<code>**//bold italic//**</code>).
 </p>
 
@@ -473,13 +476,38 @@ get plain-text ones.
 <td>output file name</td>
 </tr>
 <tr>
+<td><code>%%currentfile</code></td>
+<td>file being read (differs from <code>%%infile</code> in an include)</td>
+</tr>
+<tr>
+<td><code>%%target</code></td>
+<td>target name (<code>html</code>, <code>md</code>, <code>tex</code>...)</td>
+</tr>
+<tr>
+<td><code>%%encoding</code></td>
+<td>the encoding</td>
+</tr>
+<tr>
+<td><code>%%appname</code>, <code>%%appurl</code>, <code>%%appversion</code></td>
+<td>name, address and version of the program</td>
+</tr>
+<tr>
+<td><code>%%header1</code>, <code>%%header2</code>, <code>%%header3</code></td>
+<td>title, author and date of the document</td>
+</tr>
+<tr>
 <td><code>%%toc</code></td>
 <td>the table of contents, at this position</td>
 </tr>
 </table>
 
 <p>
-Macro names are case insensitive. A table of contents can also be requested with <code>--toc</code> (<code>--toc-level=N</code>
+Macro names are case insensitive. <code>%%date</code> and <code>%%mtime</code> are in UTC (the C
+locale); <code>SOURCE_DATE_EPOCH</code> fixes the time for reproducible builds. The file
+macros take the format flags <code>%f</code> (file name), <code>%F</code> (without the
+extension), <code>%d</code> (directory), <code>%D</code> (directory name), <code>%p</code> (path) and <code>%e</code>
+(extension). Macros are expanded in running text only, not in verbatim, raw or
+tagged blocks nor inside a mono span. A table of contents can also be requested with <code>--toc</code> (<code>--toc-level=N</code>
 sets the depth, <code>--toc-title=S</code> the title, <code>--toc-only</code> prints only it).
 </p>
 
@@ -770,7 +798,8 @@ The <code>*s</code> and <code>htmls</code> targets render spreadsheet-like outpu
 <p>
 The Go, Rust, Lua and Tcl ports re-implement a subset of the language with
 their own small code base. They read the same <code>.t2t</code> files but only produce
-HTML and LaTeX (<code>-t html</code> or <code>-t tex</code>; Tcl does HTML only).
+HTML, LaTeX and (Go and Rust) Markdown: <code>-t html</code>, <code>-t tex</code>, <code>-t md</code>.
+Lua does HTML and LaTeX, Tcl HTML only.
 </p>
 
 <table class="tableborder">
@@ -833,16 +862,36 @@ HTML and LaTeX (<code>-t html</code> or <code>-t tex</code>; Tcl does HTML only)
 </table>
 
 <p>
-Go and Rust produce identical output. Their bare URLs follow the same rules as
+Go and Rust follow the Python port rules for what they cover. Their Markdown
+output (<code>-t md</code>) is meant to be byte for byte the one of the Python and Perl
+ports. The repository checks this on many sample files, with and without
+<code>--toc -n</code>.
+HTML and LaTeX are not meant to be the same as the full ports: their markup is
+simpler. A mark only needs its inside to hug the text, a backslash is plain
+text (so <code>\**x**</code> is a backslash followed by bold), a <code>%%toc</code> needs <code>--toc</code>
+to print anything, and <code>%!options:</code> lines of the document are honored (the
+command line wins). Quotes (tab-indented lines), <code>+ numbered +</code> titles,
+<code>[label]</code> after a title and one-line verbatim, raw and tagged blocks work as well.
+</p>
+<p>
+Go and Rust produce identical output, and take the options of the Python port
+that apply to their three targets: <code>-t</code>, <code>-o</code>, <code>-i</code>, <code>-H</code>, <code>--toc</code>,
+<code>--toc-level</code>, <code>--toc-title</code>, <code>--toc-only</code>, <code>-n</code> (html and md),
+<code>--skip-header-lines</code>, <code>--encoding</code> (UTF-8 only), <code>--dump-source</code>,
+<code>--dump-config</code>, <code>-q</code>, <code>-v</code>, <code>-V</code>, <code>-h</code>, <code>--targets</code>, the <code>no-</code>
+prefix and <code>--no-rc</code>. The options that need CSS, templates, rc files or other
+targets (<code>--style</code>, <code>-T</code>, <code>-C</code>, <code>--mask-email</code>, <code>--width</code>...) stop
+with an error. As in the Python port the result is written to
+<code>file.&lt;target&gt;</code>; <code>-o -</code> prints it. Their bare URLs follow the same rules as
 the reference: a URL stops at brackets, quotes and spaces, and drops trailing
-<code>.,;:!?</code>. They have no includes, quotes, numbered titles or other targets;
+<code>.,;:!?</code>. They have no includes or other targets;
 use the Python or Perl versions for those.
 </p>
 <p>
-Binaries for Go and Rust are attached to the GitHub releases.
+Binaries for Go and Rust are attached to the <a href="https://github.com/luginf/txt2tags-ports/releases">GitHub releases</a>.
 </p>
 </section>
 
 <!-- html5 code generated by txt2tags 2.6. (http://txt2tags.org) -->
-<!-- cmdline: txt2tags -\-no-rc -t html5 -o docs/index.html docs/manual.t2t -->
+<!-- cmdline: txt2tags -t html5 -o docs/index.html docs/manual.t2t -->
 </article></body></html>

@@ -43,9 +43,10 @@ BEGIN {
 
 package Text::Txt2tags::MacroMaster;
 use POSIX qw(strftime);
-our (%CONF, %MACROS);
+our (%CONF, %MACROS, %regex);
 BEGIN {
     *CONF   = \%Text::Txt2tags::State::CONF;
+    *regex  = \%Text::Txt2tags::State::regex;
     *MACROS = \%Text::Txt2tags::Constants::MACROS;
 }
 
@@ -58,33 +59,87 @@ sub expand {
     my ($self, $line) = @_;
     $line //= '';
     my $config = $self->{config};
+    my $rgx = $regex{macros} || Text::Txt2tags::Regexes::getRegexes()->{macros};
 
-    # %%macroname[(format)]
-    $line =~ s{%%(?<name>[a-zA-Z]+)\b(?:\((?<fmt>[^)]*)\))?}{
+    # %%macroname[(format)], expanded left to right, once each
+    $line =~ s{$rgx}{
         my $name = lc $+{name};
-        my $fmt  = $+{fmt} // '';
+        my $fmt  = $+{fmt};
         $self->_expand_macro($name, $fmt, $config);
     }ge;
 
     return $line;
 }
 
+# The date macros are UTC and in the C locale, as in the Python port
+my @WDAY = qw(Sunday Monday Tuesday Wednesday Thursday Friday Saturday);
+my @MON  = qw(January February March April May June July August September
+              October November December);
+
+sub _strftime {
+    my ($fmt, $epoch) = @_;
+    my ($S, $M, $H, $d, $m, $y, $wd, $yd) = gmtime($epoch);
+    $y += 1900;
+    my %f = (
+        Y => $y, y => sprintf('%02d', $y % 100), m => sprintf('%02d', $m + 1),
+        d => sprintf('%02d', $d), e => sprintf('%2d', $d),
+        H => sprintf('%02d', $H), M => sprintf('%02d', $M), S => sprintf('%02d', $S),
+        I => sprintf('%02d', $H % 12 || 12), p => ($H < 12 ? 'AM' : 'PM'),
+        j => sprintf('%03d', $yd + 1),
+        a => substr($WDAY[$wd], 0, 3), A => $WDAY[$wd],
+        b => substr($MON[$m], 0, 3), h => substr($MON[$m], 0, 3), B => $MON[$m],
+        u => ($wd || 7), w => $wd, s => $epoch, Z => 'UTC', z => '+0000',
+        F => sprintf('%d-%02d-%02d', $y, $m + 1, $d),
+        T => sprintf('%02d:%02d:%02d', $H, $M, $S),
+        D => sprintf('%02d/%02d/%02d', $m + 1, $d, $y % 100),
+        n => "\n", t => "\t", '%' => '%',
+    );
+    $fmt =~ s{%(.?)}{ $1 eq '' ? '%' : (exists $f{$1} ? $f{$1} : "%$1") }ge;
+    return $fmt;
+}
+
+# %%infile(fmt) and friends: %f name, %F name without extension, %d
+# directory, %D parent directory name only, %p path, %e extension
+sub _file_macro {
+    my ($file, $fmt) = @_;
+    $file //= '';
+    my ($path, $dir, $name) = ($file, '', $file);
+    if ($file ne '' && $file ne '-') {
+        require File::Spec;
+        require File::Basename;
+        $path = File::Spec->rel2abs($file);
+        $dir  = File::Basename::dirname($path);
+        $name = File::Basename::basename($path);
+    }
+    my ($stem, $ext) = ($name, '');
+    ($stem, $ext) = ($1, $2) if $name =~ /^(.+)\.([^.]*)$/;
+    my %f = (
+        f => $name, F => $stem, d => $dir, D => ($dir =~ m{([^/]*)$} ? $1 : ''),
+        p => $path, e => $ext, '%' => '%',
+    );
+    $fmt =~ s{%(.?)}{ $1 eq '' ? '%' : (exists $f{$1} ? $f{$1} : "%$1") }ge;
+    return $fmt;
+}
+
 sub _expand_macro {
     my ($self, $name, $fmt, $config) = @_;
     $config //= \%CONF;
+    my $epoch = $ENV{SOURCE_DATE_EPOCH} // time;
 
     if ($name eq 'date') {
-        my $f = $fmt || $MACROS{date} || '%Y-%m-%d';
-        return strftime($f, localtime);
+        return _strftime($fmt // $MACROS{date} // '%Y-%m-%d', $epoch);
     }
     elsif ($name eq 'mtime') {
-        my $f = $fmt || $MACROS{mtime} || '%Y%m%d';
-        my $infile = $config->{currentsourcefile} // $config->{sourcefile} // $config->{infile} // '';
-        my @t = ($infile && -f $infile) ? localtime((stat $infile)[9]) : localtime;
-        return strftime($f, @t);
+        my $infile = $config->{sourcefile} // $config->{infile} // '';
+        my $t = ($infile ne '' && $infile ne '-' && -f $infile) ? (stat $infile)[9] : $epoch;
+        return _strftime($fmt // $MACROS{mtime} // '%Y%m%d', $t);
     }
-    elsif ($name =~ /^(infile|currentfile|outfile)$/) {
-        return $config->{$name} // '';
+    elsif ($name eq 'infile' || $name eq 'currentfile') {
+        my $file = $name eq 'infile' ? $config->{sourcefile} : $config->{currentsourcefile};
+        return _file_macro($file // $config->{sourcefile}, $fmt // '%f');
+    }
+    elsif ($name eq 'outfile') {
+        return _file_macro($config->{outfile}, $fmt // '%f');
     }
     elsif ($name =~ /^header([123])$/) {
         return $config->{"header$1"} // '';
@@ -98,8 +153,14 @@ sub _expand_macro {
     elsif ($name eq 'cmdline') {
         return join(' ', @{ $config->{realcmdline} // [] });
     }
-    elsif ($name =~ /^(appurl|appname|appversion)$/) {
-        return $config->{$name} // '';
+    elsif ($name eq 'appurl') {
+        return $Text::Txt2tags::Constants::MY_URL;
+    }
+    elsif ($name eq 'appname') {
+        return $Text::Txt2tags::Constants::MY_NAME;
+    }
+    elsif ($name eq 'appversion') {
+        return $Text::Txt2tags::Constants::MY_VERSION;
     }
     elsif ($name eq 'cc') {
         return $config->{cc} // '';
@@ -203,7 +264,7 @@ sub mask {
         elsif ($v <= $t && $v <= $r && $v <= $m && $v < length($line)+1) {
             $line =~ $regex{fontMono};
             my $orig = $&;
-            my $txt = doEscape($TARGET, $1);
+            my $txt = $rules{monoinlinenotescaped} ? $1 : doEscape($TARGET, $1);
             my $i = scalar @{ $self->{monobank} };
             push @{ $self->{monobank} }, $txt;
             push @{ $self->{monobank_orig} }, $orig;
@@ -398,7 +459,8 @@ sub undo_title {
 # ===========================================================================
 
 package Text::Txt2tags::TitleMaster;
-# (no globals needed)
+our %rules;
+BEGIN { *rules = \%Text::Txt2tags::State::rules }
 
 sub new {
     my ($class) = @_;
@@ -450,7 +512,12 @@ sub add {
     # Build TOC entry
     my $indent = '  ' x ($level - 1);
     my $entry;
-    if ($kind eq 'numtitle') {
+    if ($rules{tocgithubanchors}) {
+        # Markdown: link to the anchor the renderer gives each title
+        my $text = $kind eq 'numtitle' ? "$self->{count_id}. $txt" : $txt;
+        $entry = sprintf('%s- [""%s"" #%s]', $indent, $text, $self->_github_slug($text));
+    }
+    elsif ($kind eq 'numtitle') {
         $entry = sprintf('%s- %s %s', $indent, $self->{count_id}, $txt);
     }
     else {
@@ -459,6 +526,19 @@ sub add {
     push @{ $self->{toc} }, $entry;
 
     return $lbl;
+}
+
+# GitHub's anchor for a title: lowercase, spaces to hyphens, punctuation
+# dropped, -1, -2 for repeats
+sub _github_slug {
+    my ($self, $text) = @_;
+    $text =~ s/\[([^\]]*?)\s+\S+\]/$1/g;          # [label url] -> label
+    $text =~ s/\*\*|\/\/|__|--|``|[\\*`~]//g;      # marks and escapes
+    my $base = join '', map {
+        /[\p{L}\p{N}_-]/ ? lc($_) : /\s/ ? '-' : ''
+    } split //, $text;
+    my $n = $self->{slug_seen}{$base}++;
+    return $n ? "$base-$n" : $base;
 }
 
 sub last_count_id { return $_[0]->{last_count_id} // '' }
@@ -538,6 +618,8 @@ sub blockin {
 
     my $pfx      = $self->_tag_prefix($blockname);
     my $tag_open = $TAGS{$pfx . 'Open'} // '';
+    # a fenced verb block gets its fence in blockout, once the code is known
+    $tag_open = '' if $blockname eq 'verb' && $rules{verbfence};
     push @out, $tag_open if $tag_open;
 
     return \@out;
@@ -554,6 +636,18 @@ sub blockout {
 
     my $pfx = $self->_tag_prefix($blockname);
 
+    # A fence must be longer than any run of its own character in the code
+    my $fence = '';
+    if ($blockname eq 'verb' && $rules{verbfence}) {
+        my $c = substr($TAGS{blockVerbOpen} // '```', 0, 1);
+        my $longest = length($TAGS{blockVerbOpen} // '```') - 1;
+        for my $line (@{ $self->{hold} }) {
+            while ($line =~ /(\Q$c\E+)/g) { $longest = length($1) if length($1) > $longest }
+        }
+        $fence = $c x ($longest + 1);
+        push @out, $fence;
+    }
+
     # Flush held lines
     for my $line (@{ $self->{hold} }) {
         my $tag = $TAGS{$pfx . 'Line'} // '';
@@ -569,8 +663,18 @@ sub blockout {
     $self->{hold} = [];
 
     my $tag_close = $TAGS{$pfx . 'Close'} // '';
+    $tag_close = $fence if $fence;
     push @out, $tag_close if $tag_close;
 
+    # Markdown: a paragraph closed by the next block still ends with a blank
+    # line (the blank-line tidy step drops any double one)
+    push @out, '' if $TARGET eq 'md' && $blockname eq 'para' && $rules{blanksaroundpara};
+
+    # Markdown: raw and tagged text are blocks of their own
+    if ($TARGET eq 'md' && ($blockname eq 'raw' || $blockname eq 'tagged') && @out) {
+        unshift @out, '';
+        push @out, '';
+    }
     # Only update last if this block produced output (matching Python v2 behavior)
     $self->{last} = $blockname if @out;
     return \@out;
@@ -648,6 +752,7 @@ sub _parse_cell {
     my $cell_align = $align || 'Left';
 
     $cell =~ s/^\s+|\s+$//g if $rules{tablecellstrip};
+    $cell =~ s/\|/\\|/g if $TARGET eq 'md';    # a bar would end the cell
 
     # Python: title rows fall back to normal cell tags if title-specific ones aren't defined
     my $open_tag  = $is_title
@@ -745,6 +850,13 @@ sub parse_row_props {
     return { cellalign => \@cellalign, cellspan => \@cellspan, colalign => \@colalign };
 }
 
+# Alignment row that follows a markdown (GFM) table header
+sub md_align_row {
+    my ($colalign) = @_;
+    my %cell = (Left => '---', Center => ':---:', Right => '---:');
+    return "\n|" . join('|', map { $cell{$_} // '---' } @$colalign) . '|';
+}
+
 sub parse_row {
     my ($self, $line, $cell_proc, $context) = @_;
     $context //= {};
@@ -757,6 +869,10 @@ sub parse_row {
 
     # Match Python: lstrip, then detect table marks by position
     $line =~ s/^ +//;
+
+    # Vertical header marks: |_ keeps a normal row, |/ makes it a title row
+    substr($line, 1, 1, '') if length($line) > 1 && substr($line, 1, 1) eq '_';
+    substr($line, 1, 1, '|') if length($line) > 1 && substr($line, 1, 1) eq '/';
 
     # Detect title mark: line[1] == '|' means || prefix
     if (length($line) > 1 && substr($line, 1, 1) eq '|') {
@@ -805,8 +921,8 @@ sub parse_row {
         $row_open  = $TAGS{tableTitleRowOpen}  // '';
         $row_close = $TAGS{tableTitleRowClose} // '';
         $cell_sep  = $TAGS{tableTitleCellSep}  // '';
-        # GFM needs one "---" separator cell per header cell
-        $row_close = "|\n|" . ('---|' x scalar(@cells)) if ($CONF{target} // '') eq 'md';
+        # GFM header separator row, one alignment cell per column
+        $row_close .= md_align_row($table_colalign) if ($CONF{target} // '') eq 'md';
     } else {
         $row_open  = $TAGS{tableRowOpen}  // '';
         $row_close = $TAGS{tableRowClose} // '';

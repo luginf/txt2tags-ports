@@ -376,11 +376,15 @@ sub convert {
         }
         if ($line =~ $regex{blockTaggedOpen}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('tagged') };
             next;
         }
         if ($line =~ $regex{'1lineTagged'}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('tagged') };
             $line =~ s/$regex{'1lineTagged'}//;
             $BLOCK->holdadd($line);
@@ -398,11 +402,15 @@ sub convert {
         }
         if ($line =~ $regex{blockRawOpen}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('raw') };
             next;
         }
         if ($line =~ $regex{'1lineRaw'}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('raw') };
             $line =~ s/$regex{'1lineRaw'}//;
             $BLOCK->holdadd(doEscape($target, $line));
@@ -435,6 +443,8 @@ sub convert {
         }
         if ($line =~ $regex{blockVerbOpen}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
             push @ret, '' if $rules{blanksaroundverb} && !$rules{"blanksaround" . $BLOCK->last};
             push @ret, @{ $BLOCK->blockin('verb') };
@@ -442,6 +452,8 @@ sub convert {
         }
         if ($line =~ $regex{'1lineVerb'}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
             push @ret, '' if $rules{blanksaroundverb} && !$rules{"blanksaround" . $BLOCK->last};
             push @ret, @{ $BLOCK->blockin('verb') };
@@ -641,7 +653,7 @@ sub convert {
         }
 
         # ---- Comment line ------------------------------------------------
-        if ($line =~ $regex{comment} && $line !~ $regex{toc}) {
+        if ($line =~ $regex{comment} && $line !~ $regex{toc} && $line !~ /^$regex{macros}/) {
             next;
         }
 
@@ -653,6 +665,8 @@ sub convert {
         # (Mirrors Python v2's BlockMaster._should_add_blank_line logic.)
         my $blank_before = sub {
             my ($name) = @_;
+            # markdown: an open paragraph has not added its blank yet
+            return $rules{"blanksaround$name"} if $target eq 'md' && $BLOCK->block eq 'para';
             return $rules{"blanksaround$name"}
                 && !$rules{"blanksaround" . $BLOCK->last};
         };
@@ -662,7 +676,11 @@ sub convert {
             my $bar_chars = $2;
             my $bartype = (substr($bar_chars, 0, 1) eq '=') ? 'bar2' : 'bar1';
             $_close_all_lists->();
-            push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
+            if ($BLOCK->block) {
+                my $was_blk = $BLOCK->block;
+                push @ret, @{ $BLOCK->blockout };
+                push @ret, '' if $rules{"blanksaround$was_blk"};
+            }
             my $bar_tag = $TAGS{$bartype} // '';
             $bar_tag =~ s/\\a/$bar_chars/g;
             push @ret, '' if $blank_before->('bar');
@@ -692,6 +710,7 @@ sub convert {
                 if ($BLOCK->block) {
                     my $was_blk = $BLOCK->block;
                     push @ret, @{ $BLOCK->blockout };
+                    push @ret, '' if $rules{"blanksaround$was_blk"};
                     if ($rules{onelinepara} && $was_blk eq 'para' && $para_content_start >= 0) {
                         my @para_lines = splice(@ret, $para_content_start);
                         push @ret, join(' ', @para_lines) if @para_lines;
@@ -703,7 +722,10 @@ sub convert {
                 $txt = doEscape($target, $txt);
                 $txt = $MASK->undo_title($txt);
 
-                my $lbl = $TITLE->add($level, $kind, $txt, $label);
+                # --enum-title: every title is numbered
+                my $tkind = $CONF{'enum-title'} ? 'numtitle' : $kind;
+
+                my $lbl = $TITLE->add($level, $tkind, $txt, $label);
 
                 # For numbered titles, prepend the count (e.g. "1. " or "1.2. ")
                 my $count_id = $TITLE->last_count_id;
@@ -823,6 +845,12 @@ sub convert {
                     $table_row_open_override = undef;
                 }
                 push @ret, $open_tag if $open_tag;
+                # Markdown (GFM) tables need a header row: without a title row, use an empty one
+                if ($target eq 'md' && $line !~ /^\s*\|[|\/]/) {
+                    my $n = scalar @{ $props->{cellalign} };
+                    push @ret, '|' . join('|', ('  ') x $n) . '|'
+                             . Text::Txt2tags::TableMaster::md_align_row($props->{colalign});
+                }
                 $BLOCK->blockin('table');
             }
             # Parse and emit the row
@@ -866,6 +894,7 @@ sub convert {
 
             if ($quote_depth == 0) {
                 # Entering quote from non-quote context
+                $_close_all_lists->();
                 push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
                 push @ret, '' if $blank_before->('quote');
                 $quote_oneline_buf = '' if $rules{onelinequote};
@@ -884,7 +913,7 @@ sub convert {
                     $quote_oneline_buf = '';
                 }
                 # Python adds blank before nested quote content (inner._should_add_blank_line("before","quote") depth>1)
-                if ($new_depth > 1 && $rules{blanksaroundquote}) {
+                if ($new_depth > 1 && $rules{blanksaroundquote} && !$rules{quotespacedmotheronly}) {
                     push @ret, '';
                 }
                 for my $lv ($quote_depth + 1 .. $new_depth) {
@@ -980,6 +1009,11 @@ sub convert {
             $list_pending_blank = 0;
 
             my $was_empty = (@list_stack == 0);
+            # As in Python, a change of list type is only a "bump" (a new list)
+            # when the item sits at the indent of the list that is open now,
+            # before any deeper sublists are closed.
+            my $bump = @list_stack && $list_stack[-1]{type} ne $list_type
+                && length($ind) == length($list_stack[-1]{indent});
             my $old_top   = $_close_list_levels->(length($ind));
 
             if (@list_stack == 0) {
@@ -997,7 +1031,9 @@ sub convert {
                 push @ret, $_list_ind->($ind) . $lo_tag if $lo_tag;
                 push @list_stack, { indent => $ind, type => $list_type, open_item => 0, open_tag_idx => $lo_tag ? $open_idx : undef, wide => 0 };
             }
-            elsif ($list_stack[-1]{type} ne $list_type) {
+            elsif ($bump
+                || ($list_stack[-1]{type} ne $list_type
+                    && ($list_type eq 'deflist' || $list_stack[-1]{type} eq 'deflist'))) {
                 # Same indent, different list type → close old item then list, open new
                 my $cl = pop @list_stack;
                 if ($cl->{open_item}) {
@@ -1017,6 +1053,9 @@ sub convert {
             }
             else {
                 # Same level, same type → close previous open item before new item
+                # (a dedent onto a list of another type joins that list)
+                $list_type = $list_stack[-1]{type}
+                    if $list_type ne 'deflist' && $list_stack[-1]{type} ne 'deflist';
                 if ($list_stack[-1]{open_item}) {
                     my $ic = $_item_close_tag->($list_type);
                     $_emit_item_close->($_list_ind->($list_stack[-1]{indent}), $ic);
@@ -1039,11 +1078,12 @@ sub convert {
             } else {
                 my $open    = $TAGS{$list_type . 'ItemOpen'} // '';
                 my $linepfx = $TAGS{$list_type . 'ItemLine'} // '';
+                my $reps    = $rules{listlinefromzero} ? $depth - 1 : $depth;
                 if ($linepfx) {
                     if ($rules{listlineafteropen}) {
-                        $open = $open . $linepfx x $depth;
+                        $open = $open . $linepfx x $reps;
                     } else {
-                        $open = $linepfx x $depth . $open;
+                        $open = $linepfx x $reps . $open;
                     }
                 }
                 if (($list_type eq 'list' && $rules{spacedlistitemopen}) ||
@@ -1093,6 +1133,16 @@ sub convert {
             if ($top_type eq 'deflist' && $TAGS{deflistItem2LinePrefix}) {
                 $line = $TAGS{deflistItem2LinePrefix} . $line;
             }
+            # Continuation lines are indented under the item text (markdown)
+            if (my $contw = $rules{$top_type . 'contwidth'}) {
+                my $depth_now = scalar @list_stack;
+                my $reps_now  = $rules{listlinefromzero} ? $depth_now - 1 : $depth_now;
+                my $lpfx      = $TAGS{$top_type . 'ItemLine'} // '';
+                if ($line =~ /\S/) {
+                    $line =~ s/^\s+|\s+$//g;
+                    $line = (' ' x (length($lpfx) * $reps_now + $contw)) . $line;
+                }
+            }
             push @ret, $line;
             next;
         }
@@ -1110,6 +1160,7 @@ sub convert {
             $BLOCK->blockin('para') unless $BLOCK->block;
             $para_content_start = scalar @ret if $rules{onelinepara};
         }
+        $line =~ s/^\s+|\s+$//g if $rules{parastrip};
         push @ret, $line;
     }
 
@@ -1190,6 +1241,8 @@ sub convert_this_files {
             $source_body, $myconf, $first_body_line
         );
 
+        $target_body = [] if $myconf->{'toc-only'};
+
         # Dump-source mode
         if ($myconf->{'dump-source'}) {
             print join("\n", @$source_head, @$source_conf, @$target_body), "\n";
@@ -1202,6 +1255,10 @@ sub convert_this_files {
 
         # TOC
         Message('Composing target TOC', 1);
+        # only the titles down to --toc-level are listed (3 by default)
+        if (defined(my $maxlvl = $myconf->{'toc-level'})) {
+            $marked_toc = [ grep { /^((?:  )*)/ && length($1) / 2 + 1 <= $maxlvl } @$marked_toc ];
+        }
         my $tagged_toc = toc_tagger($marked_toc, $myconf);
         my $target_toc = toc_formatter($tagged_toc, $myconf);
         $target_body   = toc_inside_body($target_body, $target_toc, $myconf);

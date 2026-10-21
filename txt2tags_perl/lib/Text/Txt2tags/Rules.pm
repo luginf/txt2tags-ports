@@ -40,6 +40,8 @@ my @ALL_RULES = qw(
     listmaxdepth        quotemaxdepth       tablecellaligntype
     blockdepthmultiply  depthmultiplyplus   cellspanmultiplier
     spreadmarkup
+    quotespacedmotheronly listlinefromzero listcontwidth numlistcontwidth
+    deflistcontwidth monoinlinenotescaped verbfence tocgithubanchors parastrip
 );
 
 # ---------------------------------------------------------------------------
@@ -446,16 +448,25 @@ my %RULES_BANK = (
         spacedlistitemopen    => 1,
         spacednumlistitemopen => 1,
         blanksaroundpara      => 1,
-        blanksaroundverb      => 0,
-        blanksaroundquote     => 0,
+        blanksaroundverb      => 1,
+        blanksaroundquote     => 1,
         blanksaroundlist      => 1,
         blanksaroundnumlist   => 1,
-        blanksarounddeflist   => 0,
+        blanksarounddeflist   => 1,
         blanksaroundtable     => 1,
         blanksaroundbar       => 1,
         blanksaroundtitle     => 1,
-        blanksaroundnumtitle  => 0,
+        blanksaroundnumtitle  => 1,
         tablecellstrip        => 1,
+        verbblocknotescaped   => 1,
+        monoinlinenotescaped  => 1,
+        verbfence             => 1,
+        tocgithubanchors      => 1,
+        parastrip             => 1,
+        quotespacedmotheronly => 1,
+        listlinefromzero      => 1,
+        listcontwidth         => 2,
+        numlistcontwidth      => 3,
     },
     gmi => {
         linkable             => 1,

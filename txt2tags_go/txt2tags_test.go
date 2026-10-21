@@ -22,6 +22,25 @@ func convert(body string) string {
 	return ToHTML("T\nA\nD\n\n" + body)
 }
 
+func tocWith(body string, target Target) string {
+	out, err := Convert("T\nA\nD\n\n"+body, target, Options{Toc: true})
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
+func tocHTML(body string) string  { return tocWith(body, TargetHTML) }
+func tocLatex(body string) string { return tocWith(body, TargetLatex) }
+func tocMd(body string) string    { return tocWith(body, TargetMarkdown) }
+
+func TestTocMacroAlonePrintsNothing(t *testing.T) {
+	out := convert("%%toc\n\n= One =")
+	if strings.Contains(out, "toc") || !strings.Contains(out, "<h1>One</h1>") {
+		t.Errorf("got %q", out)
+	}
+}
+
 func convertLatex(body string) string {
 	return ToLatex("T\nA\nD\n\n" + body)
 }
@@ -51,12 +70,10 @@ func TestStrike(t *testing.T) {
 }
 
 func TestEscaping(t *testing.T) {
-	out := convert(`\**not bold**`)
-	if !strings.Contains(out, "**not bold**") {
-		t.Errorf("escaped mark should be left literal, got %q", out)
-	}
-	if strings.Contains(out, "<b>") {
-		t.Errorf("escaped mark should not open a tag, got %q", out)
+	// as in txt2tags, a backslash is plain text: the marks after it apply
+	out := convert(`\**bold**`)
+	if !strings.Contains(out, `\<b>bold</b>`) {
+		t.Errorf("got %q", out)
 	}
 }
 
@@ -154,7 +171,7 @@ func TestTableSimpleNoHeader(t *testing.T) {
 }
 
 func TestTableDoublePipeMarksHeaderRow(t *testing.T) {
-	out := convert("|| head 1 | head 2\n|  cell 1 |  cell 2")
+	out := convert("|| head 1 | head 2\n| cell 1 | cell 2")
 	if !strings.Contains(out, "<th>head 1</th>") {
 		t.Errorf("got %q", out)
 	}
@@ -246,12 +263,9 @@ func TestImageReference(t *testing.T) {
 	}
 }
 
-func TestImageAsLink(t *testing.T) {
+func TestImageNameBeforeAURLIsJustTheLabel(t *testing.T) {
 	out := convert("[photo.png http://example.com]")
-	want := "<a href=\"http://example.com\"><img src=\"photo.png\" alt=\"\"></a>"
-	if !strings.Contains(out, want) {
-		t.Errorf("got %q", out)
-	}
+	mustContain(t, out, `<a href="http://example.com">photo.png</a>`)
 }
 
 func TestClassicNestedImageAsLink(t *testing.T) {
@@ -263,10 +277,24 @@ func TestClassicNestedImageAsLink(t *testing.T) {
 }
 
 func TestBracketsThatAreNotALinkStayLiteral(t *testing.T) {
-	out := convert("[just some text]")
-	if !strings.Contains(out, "[just some text]") {
-		t.Errorf("got %q", out)
-	}
+	mustContain(t, convert("[just]"), "[just]")
+	mustContain(t, convert("[http://only.org]"), `[<a href="http://only.org">http://only.org</a>]`)
+}
+
+func TestAnyWordOfURLCharactersIsALinkTarget(t *testing.T) {
+	// as in the reference: a file, an anchor, an e-mail, a guessed address
+	out := convert("[see this] [top #top] [me a@b.org] [w www.x.org] [f ftp.x.org]")
+	mustContain(t, out, `<a href="this">see</a>`)
+	mustContain(t, out, `<a href="#top">top</a>`)
+	mustContain(t, out, `<a href="mailto:a@b.org">me</a>`)
+	mustContain(t, out, `<a href="http://www.x.org">w</a>`)
+	mustContain(t, out, `<a href="ftp://ftp.x.org">f</a>`)
+}
+
+func TestWwwAndFtpAddressesAreLinksWithoutAProtocol(t *testing.T) {
+	out := convert("go to www.x.org/p and ftp.y.org now")
+	mustContain(t, out, `<a href="http://www.x.org/p">www.x.org/p</a>`)
+	mustContain(t, out, `<a href="ftp://ftp.y.org">ftp.y.org</a>`)
 }
 
 func TestNestedBracketsDegradeWithoutMangling(t *testing.T) {
@@ -295,12 +323,10 @@ func TestLatexImageReference(t *testing.T) {
 
 // --- glued/greedy mark matching --------------------------------------------
 
-func TestGluedMarksAreNotTreatedAsInlineFormatting(t *testing.T) {
+func TestMarksGluedToWordsStillApply(t *testing.T) {
+	// as in the reference, only the inside of a mark matters
 	out := convert("The value is 2**3**4 here.")
-	if strings.Contains(out, "<b>") {
-		t.Errorf("glued mark should not trigger bold, got %q", out)
-	}
-	if !strings.Contains(out, "2**3**4") {
+	if !strings.Contains(out, "2<b>3</b>4") {
 		t.Errorf("got %q", out)
 	}
 }
@@ -459,7 +485,7 @@ func TestDateMacroExpandsInHeaderDateField(t *testing.T) {
 }
 
 func TestTocListsHeadingsWithAnchors(t *testing.T) {
-	out := convert("%%toc\n\n= One =\n\n== Two ==")
+	out := tocHTML("%%toc\n\n= One =\n\n== Two ==")
 	for _, want := range []string{`<ul class="toc">`, "toc-h1", "toc-h2", `href="#t2t-`, `id="t2t-`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in %q", want, out)
@@ -474,16 +500,32 @@ func TestTocDoesNotAddHeadingIDsWhenAbsent(t *testing.T) {
 }
 
 func TestLatexTocUsesTableOfContents(t *testing.T) {
-	if out := convertLatex("%%toc\n\n= One ="); !strings.Contains(out, `\tableofcontents`) {
+	if out := tocLatex("%%toc\n\n= One ="); !strings.Contains(out, `\tableofcontents`) {
 		t.Errorf("got %q", out)
 	}
 }
 
 // --- raw blocks, definition lists -------------------------------------------
 
-func TestRawBlockPassesThroughUnmodified(t *testing.T) {
-	if out := convert("\"\"\"\n<b>already html</b>\n\"\"\""); !strings.Contains(out, "<b>already html</b>") {
+func TestRawBlockIsEscapedWithoutMarks(t *testing.T) {
+	out := convert("\"\"\"\n<b>raw</b> **x**\n\"\"\"")
+	if !strings.Contains(out, "&lt;b&gt;raw&lt;/b&gt; **x**") {
 		t.Errorf("got %q", out)
+	}
+}
+
+func TestTaggedBlockPassesThroughUnmodified(t *testing.T) {
+	if out := convert("'''\n<b>already html</b>\n'''"); !strings.Contains(out, "<b>already html</b>") {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestShortRulesAreNotHorizontalRules(t *testing.T) {
+	if strings.Contains(convert("----"), "<hr>") {
+		t.Error("4 dashes should not be a rule")
+	}
+	if !strings.Contains(convert("--------------------"), "<hr>") {
+		t.Error("20 dashes should be a rule")
 	}
 }
 
@@ -508,7 +550,7 @@ func TestLatexDefinitionList(t *testing.T) {
 // --- table alignment --------------------------------------------------------
 
 func TestTableAlignmentInference(t *testing.T) {
-	out := convert("|  right|  center  |left |")
+	out := convert("|  right |  center  | left |")
 	for _, want := range []string{
 		`<td style="text-align:right">right</td>`,
 		`<td style="text-align:center">center</td>`,
@@ -521,7 +563,7 @@ func TestTableAlignmentInference(t *testing.T) {
 }
 
 func TestLatexTableAlignmentInference(t *testing.T) {
-	if out := convertLatex("|  right|  center  |left |"); !strings.Contains(out, `\begin{tabular}{rcl}`) {
+	if out := convertLatex("|  right |  center  | left |"); !strings.Contains(out, `\begin{tabular}{rcl}`) {
 		t.Errorf("got %q", out)
 	}
 }
@@ -540,4 +582,188 @@ func TestPostprocRewritesRenderedOutput(t *testing.T) {
 	if !strings.Contains(out, `<p class="x">`) {
 		t.Errorf("got %q", out)
 	}
+}
+
+// ── Markdown target and options (same cases as the Rust suite) ───────────
+
+func md(body string) string {
+	return ToMarkdown("T\nA\nD\n\n" + body)
+}
+
+func mdWith(body string, opts Options) string {
+	out, err := Convert("T\nA\nD\n\n"+body, TargetMarkdown, opts)
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
+func mustContain(t *testing.T, out, want string) {
+	t.Helper()
+	if !strings.Contains(out, want) {
+		t.Errorf("output does not contain %q:\n%s", want, out)
+	}
+}
+
+func TestMdHeaderIsAHeadingThenAuthorAndDate(t *testing.T) {
+	if out := md("text"); !strings.HasPrefix(out, "# T\n\nA  \nD\n\ntext") {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestMdMarks(t *testing.T) {
+	lines := strings.Split(md("**b** //i// --s-- ``c`` __u__"), "\n")
+	if got := lines[len(lines)-1]; got != "**b** *i* ~~s~~ `c` u" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestMdEscapesLiteralTextButNotMono(t *testing.T) {
+	mustContain(t, md("2*3*4 a < b\n1. no\n# no\n``a*b_c<d``"),
+		"2\\*3\\*4 a \\< b\n1\\. no\n\\# no\n`a*b_c<d`")
+}
+
+func TestMdBackslashProtectedMark(t *testing.T) {
+	mustContain(t, md("\\**bold**"), "\\\\**bold**")
+}
+
+func TestMdLinksAndImages(t *testing.T) {
+	out := md("[txt http://x.org/a] [pic.png] [[pic.png] http://y.org] http://z.org/q.")
+	mustContain(t, out, "[txt](http://x.org/a)")
+	mustContain(t, out, "![](pic.png)")
+	mustContain(t, out, "[![](pic.png)](http://y.org)")
+	mustContain(t, out, " http://z.org/q.")
+}
+
+func TestMdNestedListsUseFourSpaces(t *testing.T) {
+	mustContain(t, md("- a\n  - b\n    - c\n- d"), "* a\n    * b\n        * c\n* d")
+}
+
+func TestMdListKindSwitchStartsANewList(t *testing.T) {
+	mustContain(t, md("- a\n+ b"), "* a\n\n1. b")
+}
+
+func TestMdDefinitionList(t *testing.T) {
+	mustContain(t, md(": Term\n def one\n def two"), "**Term**  \ndef one\ndef two")
+}
+
+func TestMdTableWithHeaderAndAlignment(t *testing.T) {
+	mustContain(t, md("|| a | b | c |\n| 1  |  2  |  3 |"), "| a | b | c |\n|---|---|---|\n| 1 | 2 | 3 |")
+	mustContain(t, md("||  a  |  b|\n|  1  |  2|"), "|:---:|---:|")
+}
+
+func TestMdTableWithoutHeaderGetsAnEmptyOne(t *testing.T) {
+	mustContain(t, md("| x | y |\n| z | w |"), "|  |  |\n|---|---|\n| x | y |")
+}
+
+func TestMdVerbatimUsesAFenceLongerThanItsContent(t *testing.T) {
+	mustContain(t, md("```\na ``` b\n```"), "````\na ``` b\n````")
+}
+
+func TestMdRawBlockIsEscapedAndTaggedBlockIsNot(t *testing.T) {
+	mustContain(t, md("\"\"\"\n<b>x</b> *\n\"\"\""), "\\<b\\>x\\</b\\> \\*")
+	mustContain(t, md("'''\n<b>x</b> *\n'''"), "<b>x</b> *")
+}
+
+func TestMdTocLinksUseGithubAnchors(t *testing.T) {
+	mustContain(t, tocMd("%%toc\n\n= Intro =\n== Sub Title ==\n= Intro ="),
+		"* [Intro](#intro)\n    * [Sub Title](#sub-title)\n* [Intro](#intro-1)")
+}
+
+func TestMdBlocksAreSeparatedByBlankLines(t *testing.T) {
+	mustContain(t, md("= H =\ntext\n\n----\n"), "# H\n\ntext\n\n---")
+}
+
+func TestOptNoHeadersDropsTheWrapper(t *testing.T) {
+	o := Options{NoHeaders: true}
+	if got := mdWith("text", o); got != "text" {
+		t.Errorf("md: %q", got)
+	}
+	if got, _ := Convert("T\nA\nD\n\ntext", TargetHTML, o); got != "<p>\ntext\n</p>" {
+		t.Errorf("html: %q", got)
+	}
+	if got, _ := Convert("T\nA\nD\n\ntext", TargetLatex, o); got != "text" {
+		t.Errorf("tex: %q", got)
+	}
+}
+
+func TestOptTocAddsATocUnlessThereIsOne(t *testing.T) {
+	o := Options{Toc: true, NoHeaders: true}
+	if out := mdWith("= A =\n== B ==", o); !strings.HasPrefix(out, "* [A](#a)\n    * [B](#b)\n\n# A") {
+		t.Errorf("got %q", out)
+	}
+	if out := mdWith("text\n\n%%toc\n\n= A =", o); strings.Count(out, "[A](#a)") != 1 {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestOptTocLevelLimitsTheToc(t *testing.T) {
+	out := mdWith("= A =\n== B ==", Options{Toc: true, TocLevel: 1, NoHeaders: true})
+	mustContain(t, out, "[A](#a)")
+	if strings.Contains(out, "[B](#b)") {
+		t.Errorf("level 2 listed:\n%s", out)
+	}
+}
+
+func TestOptTocOnly(t *testing.T) {
+	o := Options{TocOnly: true}
+	if got := mdWith("= A =\ntext", o); got != "* [A](#a)" {
+		t.Errorf("got %q", got)
+	}
+	if _, err := Convert("T\nA\nD\n\n= A =", TargetLatex, o); err == nil {
+		t.Error("toc-only with tex should fail")
+	}
+}
+
+func TestOptEnumTitleNumbersHTMLAndMd(t *testing.T) {
+	o := Options{EnumTitle: true, NoHeaders: true}
+	mustContain(t, mdWith("= A =\n== B ==\n== C ==\n= D =", o), "# 1. A\n\n## 1.1. B\n\n## 1.2. C\n\n# 2. D")
+	html, _ := Convert("T\nA\nD\n\n= A =\n== B ==", TargetHTML, o)
+	mustContain(t, html, "<h2>1.1. B</h2>")
+}
+
+func TestOptSkipHeaderLinesStartsTheBodyOnLineOne(t *testing.T) {
+	out, _ := Convert("= A =\n\ntext", TargetMarkdown, Options{SkipHeaderLines: true})
+	if out != "# A\n\ntext" {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestTargetNames(t *testing.T) {
+	if tg, ok := TargetFromName("md"); !ok || tg != TargetMarkdown {
+		t.Error("md")
+	}
+	if tg, ok := TargetFromName("latex"); !ok || tg != TargetLatex {
+		t.Error("latex")
+	}
+	if _, ok := TargetFromName("rtf"); ok {
+		t.Error("rtf should be unknown")
+	}
+}
+
+func TestDocumentOptionsAreDefaults(t *testing.T) {
+	out, _ := Convert("T\nA\nD\n%!options: --toc -n\n\n= One =\n\ntext", TargetMarkdown, Options{})
+	mustContain(t, out, "* [1\\. One](#1-one)")
+	mustContain(t, out, "# 1. One")
+	// an option for another target does not apply
+	out, _ = Convert("T\nA\nD\n%!options(html): --toc\n\n= One =\n\ntext", TargetMarkdown, Options{})
+	if strings.Contains(out, "](#") {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestTitleLabelIsDropped(t *testing.T) {
+	mustContain(t, md("= One =[lab]\n\n+ Two +[x-1]"), "# One\n\n# 1. Two")
+}
+
+func TestMdMonoSpanIsVerbatim(t *testing.T) {
+	mustContain(t, md("``//i// \\n **b**``"), "`//i// \\n **b**`")
+}
+
+func TestMdDefinitionListSublist(t *testing.T) {
+	mustContain(t, md(": term\n  - a\n    + b"), "**term**  \n    * a\n        1. b")
+}
+
+func TestMdQuote(t *testing.T) {
+	mustContain(t, md("\tquoted\n\t\tdeeper"), "> quoted\n> > deeper")
 }

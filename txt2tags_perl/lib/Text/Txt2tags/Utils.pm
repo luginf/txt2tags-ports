@@ -81,6 +81,7 @@ sub Readfile {
     if ($path eq '-') {
         # STDIN
         eval { @data = <STDIN> };
+        utf8::decode($_) for @data;   # files are read as UTF-8 characters too
         if ($@) {
             Error('You must feed me with data on STDIN!') unless $ignore_error;
         }
@@ -91,6 +92,7 @@ sub Readfile {
             require LWP::Simple;
             my $content = LWP::Simple::get($path)
                 or die "not found";
+            utf8::decode($content);
             @data = split /\n/, $content;
             $_ .= "\n" for @data;
         };

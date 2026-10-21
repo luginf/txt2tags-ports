@@ -18,6 +18,28 @@ fn convert(body: &str) -> String {
     txt2tags::to_html(&format!("T\nA\nD\n\n{body}"))
 }
 
+fn toc_opts() -> txt2tags::Options {
+    txt2tags::Options { toc: true, ..Default::default() }
+}
+
+fn toc_html(body: &str) -> String {
+    txt2tags::convert(&format!("T\nA\nD\n\n{body}"), txt2tags::Target::Html, &toc_opts()).unwrap()
+}
+
+fn toc_latex(body: &str) -> String {
+    txt2tags::convert(&format!("T\nA\nD\n\n{body}"), txt2tags::Target::Latex, &toc_opts()).unwrap()
+}
+
+fn md_toc(body: &str) -> String {
+    txt2tags::convert(&format!("T\nA\nD\n\n{body}"), txt2tags::Target::Markdown, &toc_opts()).unwrap()
+}
+
+#[test]
+fn toc_macro_alone_prints_nothing() {
+    let out = convert("%%toc\n\n= One =");
+    assert!(!out.contains("toc") && out.contains("<h1>One</h1>"), "{out}");
+}
+
 fn convert_latex(body: &str) -> String {
     txt2tags::to_latex(&format!("T\nA\nD\n\n{body}"))
 }
@@ -44,9 +66,9 @@ fn strike() {
 
 #[test]
 fn escaping() {
-    let out = convert("\\**not bold**");
-    assert!(out.contains("**not bold**"), "escaped mark is left literal");
-    assert!(!out.contains("<b>"), "escaped mark does not open a tag");
+    // as in txt2tags, a backslash is plain text: the marks after it apply
+    let out = convert("\\**bold**");
+    assert!(out.contains("\\<b>bold</b>"), "{out}");
 }
 
 #[test]
@@ -126,7 +148,7 @@ fn table_simple_no_header() {
 
 #[test]
 fn table_double_pipe_marks_header_row() {
-    let out = convert("|| head 1 | head 2\n|  cell 1 |  cell 2");
+    let out = convert("|| head 1 | head 2\n| cell 1 | cell 2");
     assert!(out.contains("<th>head 1</th>"));
     assert!(out.contains("<td>cell 1</td>"));
 }
@@ -193,7 +215,7 @@ fn date_macro_expands_in_header_date_field() {
 
 #[test]
 fn toc_lists_headings_with_anchors() {
-    let out = convert("%%toc\n\n= One =\n\n== Two ==");
+    let out = toc_html("%%toc\n\n= One =\n\n== Two ==");
     assert!(out.contains("<ul class=\"toc\">"));
     assert!(out.contains("toc-h1"));
     assert!(out.contains("toc-h2"));
@@ -263,7 +285,7 @@ fn latex_table_with_header() {
 
 #[test]
 fn latex_toc_uses_tableofcontents() {
-    let out = convert_latex("%%toc\n\n= One =");
+    let out = toc_latex("%%toc\n\n= One =");
     assert!(out.contains("\\tableofcontents"));
 }
 
@@ -308,15 +330,34 @@ fn image_reference() {
 }
 
 #[test]
-fn image_as_link() {
+fn image_name_before_a_url_is_just_the_label() {
     let out = convert("[photo.png http://example.com]");
-    assert!(out.contains("<a href=\"http://example.com\"><img src=\"photo.png\" alt=\"\"></a>"));
+    assert!(out.contains("<a href=\"http://example.com\">photo.png</a>"), "{out}");
 }
 
 #[test]
 fn brackets_that_are_not_a_link_stay_literal() {
-    let out = convert("[just some text]");
-    assert!(out.contains("[just some text]"));
+    assert!(convert("[just]").contains("[just]"));
+    let out = convert("[http://only.org]");
+    assert!(out.contains("[<a href=\"http://only.org\">http://only.org</a>]"), "{out}");
+}
+
+#[test]
+fn any_word_of_url_characters_is_a_link_target() {
+    // as in the reference: a file, an anchor, an e-mail, a guessed address
+    let out = convert("[see this] [top #top] [me a@b.org] [w www.x.org] [f ftp.x.org]");
+    assert!(out.contains("<a href=\"this\">see</a>"), "{out}");
+    assert!(out.contains("<a href=\"#top\">top</a>"), "{out}");
+    assert!(out.contains("<a href=\"mailto:a@b.org\">me</a>"), "{out}");
+    assert!(out.contains("<a href=\"http://www.x.org\">w</a>"), "{out}");
+    assert!(out.contains("<a href=\"ftp://ftp.x.org\">f</a>"), "{out}");
+}
+
+#[test]
+fn www_and_ftp_addresses_are_links_without_a_protocol() {
+    let out = convert("go to www.x.org/p and ftp.y.org now");
+    assert!(out.contains("<a href=\"http://www.x.org/p\">www.x.org/p</a>"), "{out}");
+    assert!(out.contains("<a href=\"ftp://ftp.y.org\">ftp.y.org</a>"), "{out}");
 }
 
 #[test]
@@ -344,13 +385,10 @@ fn latex_classic_nested_image_as_link() {
 // --- glued/greedy mark matching --------------------------------------------
 
 #[test]
-fn glued_marks_are_not_treated_as_inline_formatting() {
-    // A mark immediately glued to word characters on both outer sides is
-    // not real markup -- classic false positive: "2**3**4" as plain text
-    // about exponents, not bold.
+fn marks_glued_to_words_still_apply() {
+    // as in the reference, only the inside of a mark matters
     let out = convert("The value is 2**3**4 here.");
-    assert!(!out.contains("<b>"));
-    assert!(out.contains("2**3**4"));
+    assert!(out.contains("2<b>3</b>4"), "{out}");
 }
 
 #[test]
@@ -391,9 +429,21 @@ fn latex_verbatim_block() {
 }
 
 #[test]
-fn raw_block_passes_through_unmodified() {
-    let out = convert("\"\"\"\n<b>already html</b>\n\"\"\"");
+fn raw_block_is_escaped_without_marks() {
+    let out = convert("\"\"\"\n<b>raw</b> **x**\n\"\"\"");
+    assert!(out.contains("&lt;b&gt;raw&lt;/b&gt; **x**"), "{out}");
+}
+
+#[test]
+fn tagged_block_passes_through_unmodified() {
+    let out = convert("'''\n<b>already html</b>\n'''");
     assert!(out.contains("<b>already html</b>"));
+}
+
+#[test]
+fn short_rules_are_not_horizontal_rules() {
+    assert!(!convert("----").contains("<hr>"));
+    assert!(convert("--------------------").contains("<hr>"));
 }
 
 // --- definition lists ----------------------------------------------------
@@ -420,7 +470,7 @@ fn latex_definition_list() {
 
 #[test]
 fn table_alignment_inference() {
-    let out = convert("|  right|  center  |left |");
+    let out = convert("|  right |  center  | left |");
     assert!(out.contains("<td style=\"text-align:right\">right</td>"));
     assert!(out.contains("<td style=\"text-align:center\">center</td>"));
     assert!(out.contains("<td>left</td>"));
@@ -428,7 +478,7 @@ fn table_alignment_inference() {
 
 #[test]
 fn latex_table_alignment_inference() {
-    let out = convert_latex("|  right|  center  |left |");
+    let out = convert_latex("|  right |  center  | left |");
     assert!(out.contains("\\begin{tabular}{rcl}"));
 }
 
@@ -447,4 +497,196 @@ fn postproc_rewrites_rendered_output() {
     let src = "T\nA\nD\n%!postproc: '<p>' '<p class=\"x\">'\n\nhello";
     let out = txt2tags::to_html(src);
     assert!(out.contains("<p class=\"x\">"));
+}
+
+// ── Markdown target and options ──────────────────────────────────────────
+
+use txt2tags::{convert as convert_with, Options, Target};
+
+fn md(body: &str) -> String {
+    txt2tags::to_markdown(&format!("T\nA\nD\n\n{body}"))
+}
+
+fn md_with(body: &str, opts: &Options) -> String {
+    convert_with(&format!("T\nA\nD\n\n{body}"), Target::Markdown, opts).unwrap()
+}
+
+#[test]
+fn md_header_is_a_heading_then_author_and_date() {
+    assert!(md("text").starts_with("# T\n\nA  \nD\n\ntext"));
+}
+
+#[test]
+fn md_marks() {
+    assert_eq!(
+        md("**b** //i// --s-- ``c`` __u__").lines().last().unwrap(),
+        "**b** *i* ~~s~~ `c` u"
+    );
+}
+
+#[test]
+fn md_escapes_literal_text_but_not_mono() {
+    let out = md("2*3*4 a < b\n1. no\n# no\n``a*b_c<d``");
+    assert!(out.contains("2\\*3\\*4 a \\< b\n1\\. no\n\\# no\n`a*b_c<d`"), "{out}");
+}
+
+#[test]
+fn md_backslash_protected_mark() {
+    assert!(md("\\**bold**").contains("\\\\**bold**"));
+}
+
+#[test]
+fn md_links_and_images() {
+    let out = md("[txt http://x.org/a] [pic.png] [[pic.png] http://y.org] http://z.org/q.");
+    assert!(out.contains("[txt](http://x.org/a)"), "{out}");
+    assert!(out.contains("![](pic.png)"), "{out}");
+    assert!(out.contains("[![](pic.png)](http://y.org)"), "{out}");
+    assert!(out.contains(" http://z.org/q."), "{out}");
+}
+
+#[test]
+fn md_nested_lists_use_four_spaces() {
+    let out = md("- a\n  - b\n    - c\n- d");
+    assert!(out.contains("* a\n    * b\n        * c\n* d"), "{out}");
+}
+
+#[test]
+fn md_list_kind_switch_starts_a_new_list() {
+    assert!(md("- a\n+ b").contains("* a\n\n1. b"));
+}
+
+#[test]
+fn md_definition_list() {
+    assert!(md(": Term\n def one\n def two").contains("**Term**  \ndef one\ndef two"));
+}
+
+#[test]
+fn md_table_with_header_and_alignment() {
+    let out = md("|| a | b | c |\n| 1  |  2  |  3 |");
+    assert!(out.contains("| a | b | c |\n|---|---|---|\n| 1 | 2 | 3 |"), "{out}");
+    let out = md("||  a  |  b|\n|  1  |  2|");
+    assert!(out.contains("|:---:|---:|"), "{out}");
+}
+
+#[test]
+fn md_table_without_header_gets_an_empty_one() {
+    assert!(md("| x | y |\n| z | w |").contains("|  |  |\n|---|---|\n| x | y |"));
+}
+
+#[test]
+fn md_verbatim_uses_a_fence_longer_than_its_content() {
+    let out = md("```\na ``` b\n```");
+    assert!(out.contains("````\na ``` b\n````"), "{out}");
+}
+
+#[test]
+fn md_raw_block_is_escaped_and_tagged_block_is_not() {
+    assert!(md("\"\"\"\n<b>x</b> *\n\"\"\"").contains("\\<b\\>x\\</b\\> \\*"));
+    assert!(md("'''\n<b>x</b> *\n'''").contains("<b>x</b> *"));
+}
+
+#[test]
+fn md_toc_links_use_github_anchors() {
+    let out = md_toc("%%toc\n\n= Intro =\n== Sub Title ==\n= Intro =");
+    assert!(out.contains("* [Intro](#intro)\n    * [Sub Title](#sub-title)\n* [Intro](#intro-1)"), "{out}");
+}
+
+#[test]
+fn md_blocks_are_separated_by_blank_lines() {
+    assert!(md("= H =\ntext\n\n----\n").contains("# H\n\ntext\n\n---"));
+}
+
+#[test]
+fn opt_no_headers_drops_the_wrapper() {
+    let o = Options { no_headers: true, ..Options::default() };
+    assert_eq!(md_with("text", &o), "text");
+    let html = convert_with("T\nA\nD\n\ntext", Target::Html, &o).unwrap();
+    assert_eq!(html, "<p>\ntext\n</p>");
+    let tex = convert_with("T\nA\nD\n\ntext", Target::Latex, &o).unwrap();
+    assert_eq!(tex, "text");
+}
+
+#[test]
+fn opt_toc_adds_a_toc_unless_there_is_one() {
+    let o = Options { toc: true, no_headers: true, ..Options::default() };
+    let out = md_with("= A =\n== B ==", &o);
+    assert!(out.starts_with("* [A](#a)\n    * [B](#b)\n\n# A"), "{out}");
+    let out = md_with("text\n\n%%toc\n\n= A =", &o);
+    assert_eq!(out.matches("[A](#a)").count(), 1, "{out}");
+}
+
+#[test]
+fn opt_toc_level_limits_the_toc() {
+    let o = Options { toc: true, toc_level: Some(1), no_headers: true, ..Options::default() };
+    let out = md_with("= A =\n== B ==", &o);
+    assert!(out.contains("[A](#a)") && !out.contains("[B](#b)"), "{out}");
+}
+
+#[test]
+fn opt_toc_only() {
+    let o = Options { toc_only: true, ..Options::default() };
+    assert_eq!(md_with("= A =\ntext", &o), "* [A](#a)");
+    assert!(convert_with("T\nA\nD\n\n= A =", Target::Latex, &o).is_err());
+}
+
+#[test]
+fn opt_enum_title_numbers_html_and_md() {
+    let o = Options { enum_title: true, no_headers: true, ..Options::default() };
+    let out = md_with("= A =\n== B ==\n== C ==\n= D =", &o);
+    assert!(out.contains("# 1. A\n\n## 1.1. B\n\n## 1.2. C\n\n# 2. D"), "{out}");
+    let html = convert_with("T\nA\nD\n\n= A =\n== B ==", Target::Html, &o).unwrap();
+    assert!(html.contains("<h2>1.1. B</h2>"), "{html}");
+}
+
+#[test]
+fn opt_skip_header_lines_starts_the_body_on_line_one() {
+    let o = Options { skip_header_lines: true, ..Options::default() };
+    assert_eq!(convert_with("= A =\n\ntext", Target::Markdown, &o).unwrap(), "# A\n\ntext");
+}
+
+#[test]
+fn target_names() {
+    assert_eq!(Target::from_name("md"), Some(Target::Markdown));
+    assert_eq!(Target::from_name("latex"), Some(Target::Latex));
+    assert_eq!(Target::from_name("rtf"), None);
+}
+
+#[test]
+fn document_options_are_defaults() {
+    let out = txt2tags::convert(
+        "T\nA\nD\n%!options: --toc -n\n\n= One =\n\ntext",
+        txt2tags::Target::Markdown,
+        &txt2tags::Options::default(),
+    )
+    .unwrap();
+    assert!(out.contains("* [1\\. One](#1-one)"), "{out}");
+    assert!(out.contains("# 1. One"), "{out}");
+    // an option for another target does not apply
+    let out = txt2tags::convert(
+        "T\nA\nD\n%!options(html): --toc\n\n= One =\n\ntext",
+        txt2tags::Target::Markdown,
+        &txt2tags::Options::default(),
+    )
+    .unwrap();
+    assert!(!out.contains("](#"), "{out}");
+}
+
+#[test]
+fn title_label_is_dropped() {
+    assert!(md("= One =[lab]\n\n+ Two +[x-1]").contains("# One\n\n# 1. Two"));
+}
+
+#[test]
+fn md_mono_span_is_verbatim() {
+    assert!(md("``//i// \\n **b**``").contains("`//i// \\n **b**`"));
+}
+
+#[test]
+fn md_definition_list_sublist() {
+    assert!(md(": term\n  - a\n    + b").contains("**term**  \n    * a\n        1. b"));
+}
+
+#[test]
+fn md_quote() {
+    assert!(md("\tquoted\n\t\tdeeper").contains("> quoted\n> > deeper"));
 }

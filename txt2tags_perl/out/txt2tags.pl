@@ -479,6 +479,7 @@ sub Readfile {
     if ($path eq '-') {
         # STDIN
         eval { @data = <STDIN> };
+        utf8::decode($_) for @data;   # files are read as UTF-8 characters too
         if ($@) {
             Error('You must feed me with data on STDIN!') unless $ignore_error;
         }
@@ -489,6 +490,7 @@ sub Readfile {
             require LWP::Simple;
             my $content = LWP::Simple::get($path)
                 or die "not found";
+            utf8::decode($content);
             @data = split /\n/, $content;
             $_ .= "\n" for @data;
         };
@@ -614,7 +616,7 @@ sub getRegexes {
         login  => q{[A-Za-z0-9_.-]},
         pass   => q{[^ @]*},
         chars  => q{[A-Za-z0-9%._/~:,=$@&+\-]},
-        anchor => q{[A-Za-z0-9%._\-]},
+        anchor => q{[\w%.\-]},
         form   => q{[A-Za-z0-9/%&=+:;.,$@*_\-]},
         punct  => q{[.,;:!?]},
     );
@@ -664,14 +666,14 @@ sub getRegexes {
         '1lineTagged'    => qr/^''' (?=.)/,
 
         # Inline font marks – greedy, glued (no boundary spaces)
-        fontMono         => qr/``([^\s](?:.*?[^\s])?`*)``/,
-        raw              => qr/""([^\s](?:.*?[^\s])?"*)""/,
-        tagged           => qr/''([^\s](?:.*?[^\s])?'*)''/ ,
-        math             => qr/\$\$([^\s](?:.*?[^\s])?\$*)\$\$/,
-        fontBold         => qr/\*\*([^\s](?:.*?[^\s])?\**)\*\*/,
-        fontItalic       => qr|//([^\s](?:.*?[^\s])?/*)//|,
-        fontUnderline    => qr/__([^\s](?:.*?[^\s])?_*)__/,
-        fontStrike       => qr/--([^\s](?:.*?[^\s])?-*)--/,
+        fontMono         => qr/``([^\s](?:|.*?[^\s])`*)``/,
+        raw              => qr/""([^\s](?:|.*?[^\s])"*)""/,
+        tagged           => qr/''([^\s](?:|.*?[^\s])'*)''/ ,
+        math             => qr/\$\$([^\s](?:|.*?[^\s])\$*)\$\$/,
+        fontBold         => qr/\*\*([^\s](?:|.*?[^\s])\**)\*\*/,
+        fontItalic       => qr{//([^\s](?:|.*?[^\s])/*)//},
+        fontUnderline    => qr/__([^\s](?:|.*?[^\s])_*)__/,
+        fontStrike       => qr/--([^\s](?:|.*?[^\s])-*)--/,
 
         # Lists
         list             => qr/^( *)(-) (?=[^ ])/,
@@ -705,7 +707,7 @@ sub getRegexes {
     );
 
     # Italic regex: // needs special care to avoid URL confusion
-    $bank{fontItalic} = qr{//([^\s](?:.*?[^\s])?/*)//};
+    $bank{fontItalic} = qr{//([^\s](?:|.*?[^\s])/*)//};
 
     # Macro pattern  %%macroname[(fmt)]
     $bank{macros} = qr/%%(?<name>$macro_names)\b(?:\((?<fmt>.*?)\))?/i;
@@ -1126,17 +1128,21 @@ my %ALL_TAGS = (
 
     # --- Markdown ----------------------------------------------------------
     md => {
-        title1              => '# \a ',
-        title2              => '## \a ',
-        title3              => '### \a ',
-        title4              => '#### \a ',
-        title5              => '##### \a ',
-        blockVerbLine       => '    ',
+        title1              => '# \a',
+        title2              => '## \a',
+        title3              => '### \a',
+        title4              => '#### \a',
+        title5              => '##### \a',
+        blockVerbOpen       => '```',
+        blockVerbClose      => '```',
         blockQuoteLine      => '> ',
         listItemOpen        => '*',
-        listItemLine        => ' ',
+        listItemLine        => '    ',
         numlistItemOpen     => '1.',
-        deflistItem1Open    => ': ',
+        numlistItemLine     => '    ',
+        deflistItem1Open    => "\n**",
+        deflistItem1Close   => '**  ',
+        deflistItem2Close   => '',
         bar1                => '---',
         bar2                => '---',
         url                 => '\a',
@@ -1152,12 +1158,12 @@ my %ALL_TAGS = (
         fontItalicClose     => '*',
         fontStrikeOpen      => '~~',
         fontStrikeClose     => '~~',
-        tableRowOpen        => '|',
-        tableRowClose       => '|',
-        tableCellSep        => ' |',
+        tableRowOpen        => '| ',
+        tableRowClose       => ' |',
+        tableCellSep        => ' | ',
         tableTitleRowOpen   => '| ',
-        tableTitleRowClose  => "|\n|---------------|",
-        tableTitleCellSep   => ' |',
+        tableTitleRowClose  => ' |',
+        tableTitleCellSep   => ' | ',
     },
 
     # --- reStructuredText -------------------------------------------------
@@ -2436,6 +2442,8 @@ my @ALL_RULES = qw(
     listmaxdepth        quotemaxdepth       tablecellaligntype
     blockdepthmultiply  depthmultiplyplus   cellspanmultiplier
     spreadmarkup
+    quotespacedmotheronly listlinefromzero listcontwidth numlistcontwidth
+    deflistcontwidth monoinlinenotescaped verbfence tocgithubanchors parastrip
 );
 
 # ---------------------------------------------------------------------------
@@ -2842,16 +2850,25 @@ my %RULES_BANK = (
         spacedlistitemopen    => 1,
         spacednumlistitemopen => 1,
         blanksaroundpara      => 1,
-        blanksaroundverb      => 0,
-        blanksaroundquote     => 0,
+        blanksaroundverb      => 1,
+        blanksaroundquote     => 1,
         blanksaroundlist      => 1,
         blanksaroundnumlist   => 1,
-        blanksarounddeflist   => 0,
+        blanksarounddeflist   => 1,
         blanksaroundtable     => 1,
         blanksaroundbar       => 1,
         blanksaroundtitle     => 1,
-        blanksaroundnumtitle  => 0,
+        blanksaroundnumtitle  => 1,
         tablecellstrip        => 1,
+        verbblocknotescaped   => 1,
+        monoinlinenotescaped  => 1,
+        verbfence             => 1,
+        tocgithubanchors      => 1,
+        parastrip             => 1,
+        quotespacedmotheronly => 1,
+        listlinefromzero      => 1,
+        listcontwidth         => 2,
+        numlistcontwidth      => 3,
     },
     gmi => {
         linkable             => 1,
@@ -3284,7 +3301,7 @@ sub scan {
 
         if ($line =~ /\S/) {
             my $is_comment = substr($line, 0, 1) eq '%';
-            my $is_macro   = $line =~ $rgx->{macros};
+            my $is_macro   = $line =~ /^$rgx->{macros}/;
             my $is_toc     = $line =~ $rgx->{toc};
             my $is_include = ($cfg_parser->parse_line($line, 'include'))[1];
             my $is_csv     = ($cfg_parser->parse_line($line, 'csv'))[1];
@@ -3527,9 +3544,44 @@ sub _parse_prepost_value {
     return [ $tokens[0] // '', $tokens[1] // '' ];
 }
 
+# The command line options a `%!options:` line may carry, as raw
+# [target, key, value] triples. Actions, --target and unknown options are
+# ignored, as in the Python port.
+sub options_to_raw {
+    my ($str) = @_;
+    require Getopt::Long;
+    require Text::ParseWords;
+    my @words = Text::ParseWords::shellwords($str // '');
+    my @raw;
+    my %spec;
+    for my $flag (qw(toc toc-only enum-title mask-email css-sugar css-inside
+                     fix-path embed-images blank-closes-list skip-header-lines
+                     legacy quiet)) {
+        $spec{$flag}       = sub { push @raw, ['all', $flag, ''] };
+        $spec{"no-$flag"}  = sub { push @raw, ['all', "no-$flag", ''] };
+    }
+    $spec{'headers'}       = sub { push @raw, ['all', 'headers', ''] };
+    $spec{'no-headers|H'}  = sub { push @raw, ['all', 'no-headers', ''] };
+    $spec{'enum-title|n'}  = $spec{'enum-title'};
+    delete $spec{'enum-title'};
+    for my $opt (qw(encoding toc-level toc-title style chars width height
+                    template config-file)) {
+        $spec{"$opt=s"} = sub { push @raw, ['all', $opt, $_[1]] };
+    }
+    my $parser = Getopt::Long::Parser->new(config => [qw(bundling pass_through)]);
+    $parser->getoptionsfromarray(\@words, %spec);
+    return \@raw;
+}
+
 sub add {
     my ($self, $key, $val) = @_;
     $val //= '';
+
+    # %!options: the value is a command line, every option in it is added
+    if ($key eq 'options') {
+        $self->add(@$_[1, 2]) for @{ options_to_raw($val) };
+        return;
+    }
 
     # no- prefix = turn OFF
     if ($key =~ s/^no-//) {
@@ -3668,6 +3720,12 @@ sub sanity {
         $config->{width} ||= Text::Txt2tags::Constants::DFT_TEXT_WIDTH();
     }
 
+    # --toc-only is stronger than others
+    if ($config->{'toc-only'}) {
+        $config->{headers} = 0;
+        $config->{split}   = 0;
+    }
+
     # Determine output file name if not already set
     $config->{outfile} ||= $self->get_outfile_name($config);
 
@@ -3753,9 +3811,10 @@ BEGIN {
 
 package Text::Txt2tags::MacroMaster;
 use POSIX qw(strftime);
-our (%CONF, %MACROS);
+our (%CONF, %MACROS, %regex);
 BEGIN {
     *CONF   = \%Text::Txt2tags::State::CONF;
+    *regex  = \%Text::Txt2tags::State::regex;
     *MACROS = \%Text::Txt2tags::Constants::MACROS;
 }
 
@@ -3768,33 +3827,87 @@ sub expand {
     my ($self, $line) = @_;
     $line //= '';
     my $config = $self->{config};
+    my $rgx = $regex{macros} || Text::Txt2tags::Regexes::getRegexes()->{macros};
 
-    # %%macroname[(format)]
-    $line =~ s{%%(?<name>[a-zA-Z]+)\b(?:\((?<fmt>[^)]*)\))?}{
+    # %%macroname[(format)], expanded left to right, once each
+    $line =~ s{$rgx}{
         my $name = lc $+{name};
-        my $fmt  = $+{fmt} // '';
+        my $fmt  = $+{fmt};
         $self->_expand_macro($name, $fmt, $config);
     }ge;
 
     return $line;
 }
 
+# The date macros are UTC and in the C locale, as in the Python port
+my @WDAY = qw(Sunday Monday Tuesday Wednesday Thursday Friday Saturday);
+my @MON  = qw(January February March April May June July August September
+              October November December);
+
+sub _strftime {
+    my ($fmt, $epoch) = @_;
+    my ($S, $M, $H, $d, $m, $y, $wd, $yd) = gmtime($epoch);
+    $y += 1900;
+    my %f = (
+        Y => $y, y => sprintf('%02d', $y % 100), m => sprintf('%02d', $m + 1),
+        d => sprintf('%02d', $d), e => sprintf('%2d', $d),
+        H => sprintf('%02d', $H), M => sprintf('%02d', $M), S => sprintf('%02d', $S),
+        I => sprintf('%02d', $H % 12 || 12), p => ($H < 12 ? 'AM' : 'PM'),
+        j => sprintf('%03d', $yd + 1),
+        a => substr($WDAY[$wd], 0, 3), A => $WDAY[$wd],
+        b => substr($MON[$m], 0, 3), h => substr($MON[$m], 0, 3), B => $MON[$m],
+        u => ($wd || 7), w => $wd, s => $epoch, Z => 'UTC', z => '+0000',
+        F => sprintf('%d-%02d-%02d', $y, $m + 1, $d),
+        T => sprintf('%02d:%02d:%02d', $H, $M, $S),
+        D => sprintf('%02d/%02d/%02d', $m + 1, $d, $y % 100),
+        n => "\n", t => "\t", '%' => '%',
+    );
+    $fmt =~ s{%(.?)}{ $1 eq '' ? '%' : (exists $f{$1} ? $f{$1} : "%$1") }ge;
+    return $fmt;
+}
+
+# %%infile(fmt) and friends: %f name, %F name without extension, %d
+# directory, %D parent directory name only, %p path, %e extension
+sub _file_macro {
+    my ($file, $fmt) = @_;
+    $file //= '';
+    my ($path, $dir, $name) = ($file, '', $file);
+    if ($file ne '' && $file ne '-') {
+        require File::Spec;
+        require File::Basename;
+        $path = File::Spec->rel2abs($file);
+        $dir  = File::Basename::dirname($path);
+        $name = File::Basename::basename($path);
+    }
+    my ($stem, $ext) = ($name, '');
+    ($stem, $ext) = ($1, $2) if $name =~ /^(.+)\.([^.]*)$/;
+    my %f = (
+        f => $name, F => $stem, d => $dir, D => ($dir =~ m{([^/]*)$} ? $1 : ''),
+        p => $path, e => $ext, '%' => '%',
+    );
+    $fmt =~ s{%(.?)}{ $1 eq '' ? '%' : (exists $f{$1} ? $f{$1} : "%$1") }ge;
+    return $fmt;
+}
+
 sub _expand_macro {
     my ($self, $name, $fmt, $config) = @_;
     $config //= \%CONF;
+    my $epoch = $ENV{SOURCE_DATE_EPOCH} // time;
 
     if ($name eq 'date') {
-        my $f = $fmt || $MACROS{date} || '%Y-%m-%d';
-        return strftime($f, localtime);
+        return _strftime($fmt // $MACROS{date} // '%Y-%m-%d', $epoch);
     }
     elsif ($name eq 'mtime') {
-        my $f = $fmt || $MACROS{mtime} || '%Y%m%d';
-        my $infile = $config->{currentsourcefile} // $config->{sourcefile} // $config->{infile} // '';
-        my @t = ($infile && -f $infile) ? localtime((stat $infile)[9]) : localtime;
-        return strftime($f, @t);
+        my $infile = $config->{sourcefile} // $config->{infile} // '';
+        my $t = ($infile ne '' && $infile ne '-' && -f $infile) ? (stat $infile)[9] : $epoch;
+        return _strftime($fmt // $MACROS{mtime} // '%Y%m%d', $t);
     }
-    elsif ($name =~ /^(infile|currentfile|outfile)$/) {
-        return $config->{$name} // '';
+    elsif ($name eq 'infile' || $name eq 'currentfile') {
+        my $file = $name eq 'infile' ? $config->{sourcefile} : $config->{currentsourcefile};
+        return _file_macro($file // $config->{sourcefile}, $fmt // '%f');
+    }
+    elsif ($name eq 'outfile') {
+        return _file_macro($config->{outfile}, $fmt // '%f');
     }
     elsif ($name =~ /^header([123])$/) {
         return $config->{"header$1"} // '';
@@ -3808,8 +3921,14 @@ sub _expand_macro {
     elsif ($name eq 'cmdline') {
         return join(' ', @{ $config->{realcmdline} // [] });
     }
-    elsif ($name =~ /^(appurl|appname|appversion)$/) {
-        return $config->{$name} // '';
+    elsif ($name eq 'appurl') {
+        return $Text::Txt2tags::Constants::MY_URL;
+    }
+    elsif ($name eq 'appname') {
+        return $Text::Txt2tags::Constants::MY_NAME;
+    }
+    elsif ($name eq 'appversion') {
+        return $Text::Txt2tags::Constants::MY_VERSION;
     }
     elsif ($name eq 'cc') {
         return $config->{cc} // '';
@@ -3913,7 +4032,7 @@ sub mask {
         elsif ($v <= $t && $v <= $r && $v <= $m && $v < length($line)+1) {
             $line =~ $regex{fontMono};
             my $orig = $&;
-            my $txt = doEscape($TARGET, $1);
+            my $txt = $rules{monoinlinenotescaped} ? $1 : doEscape($TARGET, $1);
             my $i = scalar @{ $self->{monobank} };
             push @{ $self->{monobank} }, $txt;
             push @{ $self->{monobank_orig} }, $orig;
@@ -4108,7 +4227,8 @@ sub undo_title {
 # ===========================================================================
 
 package Text::Txt2tags::TitleMaster;
-# (no globals needed)
+our %rules;
+BEGIN { *rules = \%Text::Txt2tags::State::rules }
 
 sub new {
     my ($class) = @_;
@@ -4160,7 +4280,12 @@ sub add {
     # Build TOC entry
     my $indent = '  ' x ($level - 1);
     my $entry;
-    if ($kind eq 'numtitle') {
+    if ($rules{tocgithubanchors}) {
+        # Markdown: link to the anchor the renderer gives each title
+        my $text = $kind eq 'numtitle' ? "$self->{count_id}. $txt" : $txt;
+        $entry = sprintf('%s- [""%s"" #%s]', $indent, $text, $self->_github_slug($text));
+    }
+    elsif ($kind eq 'numtitle') {
         $entry = sprintf('%s- %s %s', $indent, $self->{count_id}, $txt);
     }
     else {
@@ -4169,6 +4294,19 @@ sub add {
     push @{ $self->{toc} }, $entry;
 
     return $lbl;
+}
+
+# GitHub's anchor for a title: lowercase, spaces to hyphens, punctuation
+# dropped, -1, -2 for repeats
+sub _github_slug {
+    my ($self, $text) = @_;
+    $text =~ s/\[([^\]]*?)\s+\S+\]/$1/g;          # [label url] -> label
+    $text =~ s/\*\*|\/\/|__|--|``|[\\*`~]//g;      # marks and escapes
+    my $base = join '', map {
+        /[\p{L}\p{N}_-]/ ? lc($_) : /\s/ ? '-' : ''
+    } split //, $text;
+    my $n = $self->{slug_seen}{$base}++;
+    return $n ? "$base-$n" : $base;
 }
 
 sub last_count_id { return $_[0]->{last_count_id} // '' }
@@ -4248,6 +4386,8 @@ sub blockin {
 
     my $pfx      = $self->_tag_prefix($blockname);
     my $tag_open = $TAGS{$pfx . 'Open'} // '';
+    # a fenced verb block gets its fence in blockout, once the code is known
+    $tag_open = '' if $blockname eq 'verb' && $rules{verbfence};
     push @out, $tag_open if $tag_open;
 
     return \@out;
@@ -4264,6 +4404,18 @@ sub blockout {
 
     my $pfx = $self->_tag_prefix($blockname);
 
+    # A fence must be longer than any run of its own character in the code
+    my $fence = '';
+    if ($blockname eq 'verb' && $rules{verbfence}) {
+        my $c = substr($TAGS{blockVerbOpen} // '```', 0, 1);
+        my $longest = length($TAGS{blockVerbOpen} // '```') - 1;
+        for my $line (@{ $self->{hold} }) {
+            while ($line =~ /(\Q$c\E+)/g) { $longest = length($1) if length($1) > $longest }
+        }
+        $fence = $c x ($longest + 1);
+        push @out, $fence;
+    }
+
     # Flush held lines
     for my $line (@{ $self->{hold} }) {
         my $tag = $TAGS{$pfx . 'Line'} // '';
@@ -4279,8 +4431,18 @@ sub blockout {
     $self->{hold} = [];
 
     my $tag_close = $TAGS{$pfx . 'Close'} // '';
+    $tag_close = $fence if $fence;
     push @out, $tag_close if $tag_close;
 
+    # Markdown: a paragraph closed by the next block still ends with a blank
+    # line (the blank-line tidy step drops any double one)
+    push @out, '' if $TARGET eq 'md' && $blockname eq 'para' && $rules{blanksaroundpara};
+
+    # Markdown: raw and tagged text are blocks of their own
+    if ($TARGET eq 'md' && ($blockname eq 'raw' || $blockname eq 'tagged') && @out) {
+        unshift @out, '';
+        push @out, '';
+    }
     # Only update last if this block produced output (matching Python v2 behavior)
     $self->{last} = $blockname if @out;
     return \@out;
@@ -4358,6 +4520,7 @@ sub _parse_cell {
     my $cell_align = $align || 'Left';
 
     $cell =~ s/^\s+|\s+$//g if $rules{tablecellstrip};
+    $cell =~ s/\|/\\|/g if $TARGET eq 'md';    # a bar would end the cell
 
     # Python: title rows fall back to normal cell tags if title-specific ones aren't defined
     my $open_tag  = $is_title
@@ -4455,6 +4618,13 @@ sub parse_row_props {
     return { cellalign => \@cellalign, cellspan => \@cellspan, colalign => \@colalign };
 }
 
+# Alignment row that follows a markdown (GFM) table header
+sub md_align_row {
+    my ($colalign) = @_;
+    my %cell = (Left => '---', Center => ':---:', Right => '---:');
+    return "\n|" . join('|', map { $cell{$_} // '---' } @$colalign) . '|';
+}
+
 sub parse_row {
     my ($self, $line, $cell_proc, $context) = @_;
     $context //= {};
@@ -4467,6 +4637,10 @@ sub parse_row {
 
     # Match Python: lstrip, then detect table marks by position
     $line =~ s/^ +//;
+
+    # Vertical header marks: |_ keeps a normal row, |/ makes it a title row
+    substr($line, 1, 1, '') if length($line) > 1 && substr($line, 1, 1) eq '_';
+    substr($line, 1, 1, '|') if length($line) > 1 && substr($line, 1, 1) eq '/';
 
     # Detect title mark: line[1] == '|' means || prefix
     if (length($line) > 1 && substr($line, 1, 1) eq '|') {
@@ -4515,8 +4689,8 @@ sub parse_row {
         $row_open  = $TAGS{tableTitleRowOpen}  // '';
         $row_close = $TAGS{tableTitleRowClose} // '';
         $cell_sep  = $TAGS{tableTitleCellSep}  // '';
-        # GFM needs one "---" separator cell per header cell
-        $row_close = "|\n|" . ('---|' x scalar(@cells)) if ($CONF{target} // '') eq 'md';
+        # GFM header separator row, one alignment cell per column
+        $row_close .= md_align_row($table_colalign) if ($CONF{target} // '') eq 'md';
     } else {
         $row_open  = $TAGS{tableRowOpen}  // '';
         $row_close = $TAGS{tableRowClose} // '';
@@ -4644,6 +4818,17 @@ sub doEscape {
     elsif ($target eq 'pm6') {
         $txt =~ s/</\<\\#60\>/g;
     }
+    elsif ($target eq 'md') {
+        # Keep literal text from being read as markdown. The doubled marks
+        # (**, ``) are txt2tags marks, only the single characters are escaped.
+        $txt =~ s/\Q$ESCCHAR\E/$ESCCHAR$ESCCHAR/g;    # a literal backslash
+        $txt =~ s/(?<!\*)\*(?!\*)/\\*/g;
+        $txt =~ s/(?<!`)`(?!`)/\\`/g;
+        $txt =~ s/(?<![_\w])_(?!_)|(?<!_)_(?![_\w])/\\_/g;
+        $txt =~ s/([<>])/\\$1/g;
+        $txt =~ s/^(\s*)(#{1,6})(\s|$)/$1\\$2$3/;
+        $txt =~ s/^(\s*)(\d+)\.(\s)/$1$2\\.$3/;
+    }
     elsif ($target eq 'mgp') {
         $txt =~ s/^%/ %/mg;
     }
@@ -4726,6 +4911,31 @@ sub addLineBreaks {
     return \@ret;
 }
 
+# One blank line between blocks, none at the start or the end, and the
+# content of fenced code blocks left as it is.
+sub tidy_markdown {
+    my ($list) = @_;
+    my (@out, $fence);
+    for my $line (@$list) {
+        if (defined $fence) {
+            push @out, $line;
+            undef $fence if $line eq $fence;
+        }
+        elsif ($line =~ /^`{3,}$/) {
+            $fence = $line;
+            push @out, $line;
+        }
+        elsif ($line =~ /^\s*$/) {
+            push @out, '' if @out && $out[-1] ne '';
+        }
+        else {
+            push @out, $line;
+        }
+    }
+    pop @out while @out && $out[-1] eq '';
+    return \@out;
+}
+
 sub expandLineBreaks {
     my ($list) = @_;
     my @ret;
@@ -4805,6 +5015,10 @@ sub get_tagged_link {
 
     my $is_email = ($url =~ /^[\w.+-]+\@[\w.-]+\.[A-Za-z]{2,4}/);
     my $is_img   = ($url =~ /\.(png|jpe?g|gif|eps|bmp|svg)$/i);
+
+    # A guessed address (www.x.org, ftp.x.org) is a named link: its own text
+    # is the label and the protocol is added to the target
+    $label = $url if !$label && !$is_email && $rules{linkable} && $url =~ /^(?:www[23]?|ftp)\./i;
 
     my ($open_tag, $close_tag);
 
@@ -4982,6 +5196,7 @@ sub finish_him {
     }
     $outlist = unmaskEscapeChar($outlist);
     $outlist = expandLineBreaks($outlist);
+    $outlist = tidy_markdown($outlist) if $config->{target} eq 'md';
 
     # Apply postproc filters
     if ($config->{postproc} && @{ $config->{postproc} }) {
@@ -5023,6 +5238,8 @@ sub finish_him {
         my @all;
         push @all, @{ $Text::Txt2tags::State::file_dict{$_} // [] }
             for keys %Text::Txt2tags::State::file_dict;
+        # the lines are decoded characters (input is read as UTF-8)
+        binmode(STDOUT, ':encoding(UTF-8)');
         print "$_\n" for @all;
     }
     else {
@@ -5280,7 +5497,7 @@ END_HTMLS
 END_TEX
     man => ".TH \"%(HEADER1)s\" 1 \"%(HEADER3)s\" \"%(HEADER2)s\"\n",
     rst => '',
-    md  => "%(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
+    md  => "# %(HEADER1)s\n\n%(HEADER2)s\n%(HEADER3)s\n\n",
     adoc=> "= %(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
     sgml => <<'END_SGML',
 <!doctype linuxdoc system>
@@ -5616,6 +5833,10 @@ sub _build_head_data {
         HEADER3  => $headers->[2] // '',
         BODY     => join("\n", @{ $config->{fullBody} // [] }),
     );
+    if ($target eq 'md') {
+        s/^\s+|\s+$//g for @d{qw(HEADER1 HEADER2 HEADER3)};
+        $d{HEADER2} .= '  ' if length $d{HEADER2} && length $d{HEADER3};
+    }
     if ($config->{style} && @{ $config->{style} }) {
         my $sty = $config->{style}[0];
         # LaTeX requires \usepackage{name} without the .sty extension
@@ -5767,7 +5988,7 @@ sub get_file_body {
 our @EXPORT_OK = qw(
     get_escapes doProtect doEscape doFinalEscape
     EscapeCharHandler maskEscapeChar unmaskEscapeChar
-    addLineBreaks expandLineBreaks compile_filters
+    addLineBreaks expandLineBreaks tidy_markdown compile_filters
     enclose_me get_tagged_link parse_deflist_term
     get_image_align get_encoding_string
     doCommentLine doHeader doFooter finish_him
@@ -6173,11 +6394,15 @@ sub convert {
         }
         if ($line =~ $regex{blockTaggedOpen}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('tagged') };
             next;
         }
         if ($line =~ $regex{'1lineTagged'}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('tagged') };
             $line =~ s/$regex{'1lineTagged'}//;
             $BLOCK->holdadd($line);
@@ -6195,11 +6420,15 @@ sub convert {
         }
         if ($line =~ $regex{blockRawOpen}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('raw') };
             next;
         }
         if ($line =~ $regex{'1lineRaw'}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockin('raw') };
             $line =~ s/$regex{'1lineRaw'}//;
             $BLOCK->holdadd(doEscape($target, $line));
@@ -6232,6 +6461,8 @@ sub convert {
         }
         if ($line =~ $regex{blockVerbOpen}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
             push @ret, '' if $rules{blanksaroundverb} && !$rules{"blanksaround" . $BLOCK->last};
             push @ret, @{ $BLOCK->blockin('verb') };
@@ -6239,6 +6470,8 @@ sub convert {
         }
         if ($line =~ $regex{'1lineVerb'}
             && !grep { $BLOCK->block eq $_ } @{ $BLOCK->{exclusive} }) {
+            push @ret, '' if $target eq 'md' && @list_stack && @ret && $ret[-1] ne '';
+            $list_pending_blank = 0 if @list_stack;    # the block interrupts the list, a blank after it is the first again
             push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
             push @ret, '' if $rules{blanksaroundverb} && !$rules{"blanksaround" . $BLOCK->last};
             push @ret, @{ $BLOCK->blockin('verb') };
@@ -6438,7 +6671,7 @@ sub convert {
         }
 
         # ---- Comment line ------------------------------------------------
-        if ($line =~ $regex{comment} && $line !~ $regex{toc}) {
+        if ($line =~ $regex{comment} && $line !~ $regex{toc} && $line !~ /^$regex{macros}/) {
             next;
         }
 
@@ -6450,6 +6683,8 @@ sub convert {
         # (Mirrors Python v2's BlockMaster._should_add_blank_line logic.)
         my $blank_before = sub {
             my ($name) = @_;
+            # markdown: an open paragraph has not added its blank yet
+            return $rules{"blanksaround$name"} if $target eq 'md' && $BLOCK->block eq 'para';
             return $rules{"blanksaround$name"}
                 && !$rules{"blanksaround" . $BLOCK->last};
         };
@@ -6459,7 +6694,11 @@ sub convert {
             my $bar_chars = $2;
             my $bartype = (substr($bar_chars, 0, 1) eq '=') ? 'bar2' : 'bar1';
             $_close_all_lists->();
-            push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
+            if ($BLOCK->block) {
+                my $was_blk = $BLOCK->block;
+                push @ret, @{ $BLOCK->blockout };
+                push @ret, '' if $rules{"blanksaround$was_blk"};
+            }
             my $bar_tag = $TAGS{$bartype} // '';
             $bar_tag =~ s/\\a/$bar_chars/g;
             push @ret, '' if $blank_before->('bar');
@@ -6489,6 +6728,7 @@ sub convert {
                 if ($BLOCK->block) {
                     my $was_blk = $BLOCK->block;
                     push @ret, @{ $BLOCK->blockout };
+                    push @ret, '' if $rules{"blanksaround$was_blk"};
                     if ($rules{onelinepara} && $was_blk eq 'para' && $para_content_start >= 0) {
                         my @para_lines = splice(@ret, $para_content_start);
                         push @ret, join(' ', @para_lines) if @para_lines;
@@ -6500,7 +6740,10 @@ sub convert {
                 $txt = doEscape($target, $txt);
                 $txt = $MASK->undo_title($txt);
 
-                my $lbl = $TITLE->add($level, $kind, $txt, $label);
+                # --enum-title: every title is numbered
+                my $tkind = $CONF{'enum-title'} ? 'numtitle' : $kind;
+
+                my $lbl = $TITLE->add($level, $tkind, $txt, $label);
 
                 # For numbered titles, prepend the count (e.g. "1. " or "1.2. ")
                 my $count_id = $TITLE->last_count_id;
@@ -6620,6 +6863,12 @@ sub convert {
                     $table_row_open_override = undef;
                 }
                 push @ret, $open_tag if $open_tag;
+                # Markdown (GFM) tables need a header row: without a title row, use an empty one
+                if ($target eq 'md' && $line !~ /^\s*\|[|\/]/) {
+                    my $n = scalar @{ $props->{cellalign} };
+                    push @ret, '|' . join('|', ('  ') x $n) . '|'
+                             . Text::Txt2tags::TableMaster::md_align_row($props->{colalign});
+                }
                 $BLOCK->blockin('table');
             }
             # Parse and emit the row
@@ -6663,6 +6912,7 @@ sub convert {
 
             if ($quote_depth == 0) {
                 # Entering quote from non-quote context
+                $_close_all_lists->();
                 push @ret, @{ $BLOCK->blockout } if $BLOCK->block;
                 push @ret, '' if $blank_before->('quote');
                 $quote_oneline_buf = '' if $rules{onelinequote};
@@ -6681,7 +6931,7 @@ sub convert {
                     $quote_oneline_buf = '';
                 }
                 # Python adds blank before nested quote content (inner._should_add_blank_line("before","quote") depth>1)
-                if ($new_depth > 1 && $rules{blanksaroundquote}) {
+                if ($new_depth > 1 && $rules{blanksaroundquote} && !$rules{quotespacedmotheronly}) {
                     push @ret, '';
                 }
                 for my $lv ($quote_depth + 1 .. $new_depth) {
@@ -6777,6 +7027,11 @@ sub convert {
             $list_pending_blank = 0;
 
             my $was_empty = (@list_stack == 0);
+            # As in Python, a change of list type is only a "bump" (a new list)
+            # when the item sits at the indent of the list that is open now,
+            # before any deeper sublists are closed.
+            my $bump = @list_stack && $list_stack[-1]{type} ne $list_type
+                && length($ind) == length($list_stack[-1]{indent});
             my $old_top   = $_close_list_levels->(length($ind));
 
             if (@list_stack == 0) {
@@ -6794,7 +7049,9 @@ sub convert {
                 push @ret, $_list_ind->($ind) . $lo_tag if $lo_tag;
                 push @list_stack, { indent => $ind, type => $list_type, open_item => 0, open_tag_idx => $lo_tag ? $open_idx : undef, wide => 0 };
             }
-            elsif ($list_stack[-1]{type} ne $list_type) {
+            elsif ($bump
+                || ($list_stack[-1]{type} ne $list_type
+                    && ($list_type eq 'deflist' || $list_stack[-1]{type} eq 'deflist'))) {
                 # Same indent, different list type → close old item then list, open new
                 my $cl = pop @list_stack;
                 if ($cl->{open_item}) {
@@ -6814,6 +7071,9 @@ sub convert {
             }
             else {
                 # Same level, same type → close previous open item before new item
+                # (a dedent onto a list of another type joins that list)
+                $list_type = $list_stack[-1]{type}
+                    if $list_type ne 'deflist' && $list_stack[-1]{type} ne 'deflist';
                 if ($list_stack[-1]{open_item}) {
                     my $ic = $_item_close_tag->($list_type);
                     $_emit_item_close->($_list_ind->($list_stack[-1]{indent}), $ic);
@@ -6836,11 +7096,12 @@ sub convert {
             } else {
                 my $open    = $TAGS{$list_type . 'ItemOpen'} // '';
                 my $linepfx = $TAGS{$list_type . 'ItemLine'} // '';
+                my $reps    = $rules{listlinefromzero} ? $depth - 1 : $depth;
                 if ($linepfx) {
                     if ($rules{listlineafteropen}) {
-                        $open = $open . $linepfx x $depth;
+                        $open = $open . $linepfx x $reps;
                     } else {
-                        $open = $linepfx x $depth . $open;
+                        $open = $linepfx x $reps . $open;
                     }
                 }
                 if (($list_type eq 'list' && $rules{spacedlistitemopen}) ||
@@ -6890,6 +7151,16 @@ sub convert {
             if ($top_type eq 'deflist' && $TAGS{deflistItem2LinePrefix}) {
                 $line = $TAGS{deflistItem2LinePrefix} . $line;
             }
+            # Continuation lines are indented under the item text (markdown)
+            if (my $contw = $rules{$top_type . 'contwidth'}) {
+                my $depth_now = scalar @list_stack;
+                my $reps_now  = $rules{listlinefromzero} ? $depth_now - 1 : $depth_now;
+                my $lpfx      = $TAGS{$top_type . 'ItemLine'} // '';
+                if ($line =~ /\S/) {
+                    $line =~ s/^\s+|\s+$//g;
+                    $line = (' ' x (length($lpfx) * $reps_now + $contw)) . $line;
+                }
+            }
             push @ret, $line;
             next;
         }
@@ -6907,6 +7178,7 @@ sub convert {
             $BLOCK->blockin('para') unless $BLOCK->block;
             $para_content_start = scalar @ret if $rules{onelinepara};
         }
+        $line =~ s/^\s+|\s+$//g if $rules{parastrip};
         push @ret, $line;
     }
 
@@ -6987,6 +7259,8 @@ sub convert_this_files {
             $source_body, $myconf, $first_body_line
         );
 
+        $target_body = [] if $myconf->{'toc-only'};
+
         # Dump-source mode
         if ($myconf->{'dump-source'}) {
             print join("\n", @$source_head, @$source_conf, @$target_body), "\n";
@@ -6999,6 +7273,10 @@ sub convert_this_files {
 
         # TOC
         Message('Composing target TOC', 1);
+        # only the titles down to --toc-level are listed (3 by default)
+        if (defined(my $maxlvl = $myconf->{'toc-level'})) {
+            $marked_toc = [ grep { /^((?:  )*)/ && length($1) / 2 + 1 <= $maxlvl } @$marked_toc ];
+        }
         my $tagged_toc = toc_tagger($marked_toc, $myconf);
         my $target_toc = toc_formatter($tagged_toc, $myconf);
         $target_body   = toc_inside_body($target_body, $target_toc, $myconf);
@@ -7235,15 +7513,19 @@ GetOptions(
     'toc-only'          => \$cli_opts{'toc-only'},
     'toc-level=i'       => \$cli_opts{'toc-level'},
     'encoding=s'        => \$cli_opts{encoding},
-    'headers!'          => \$cli_opts{headers},
-    'enum-title'        => \$cli_opts{'enum-title'},
+    'headers'           => sub { $cli_opts{headers} = 1 },
+    'no-headers|H'      => sub { $cli_opts{headers} = 0 },
+    'enum-title|n'      => \$cli_opts{'enum-title'},
+    'toc-title=s'       => \$cli_opts{'toc-title'},
+    'chars=s'           => \$cli_opts{chars},
+    'infile|i=s'        => \$cli_opts{infile},
     'mask-email'        => \$cli_opts{'mask-email'},
     'style=s'           => \$cli_opts{style},
     'css-sugar'         => \$cli_opts{'css-sugar'},
     'css-inside'        => \$cli_opts{'css-inside'},
     'width=i'           => \$cli_opts{width},
     'height=i'          => \$cli_opts{height},
-    'config-file=s'     => \$cli_opts{'config-file'},
+    'config-file|C=s'   => \$cli_opts{'config-file'},
     'template|T=s'      => \$cli_opts{template},
     'fix-path'          => \$cli_opts{'fix-path'},
     'embed-images'      => \$cli_opts{'embed-images'},
@@ -7324,6 +7606,8 @@ if ($rc_path && -f $rc_path) {
         width        => 'width',
         height       => 'height',
         'toc-level'  => 'toc-level',
+        'toc-title'  => 'toc-title',
+        chars        => 'chars',
         template     => 'template',
         'config-file'=> 'config-file',
     );
@@ -7353,6 +7637,7 @@ if ($rc_path && -f $rc_path) {
 # ---- Collect infiles from remaining ARGV ---------------------------------
 
 my @infiles = @ARGV;
+unshift @infiles, $cli_opts{infile} if defined $cli_opts{infile} && $cli_opts{infile} ne '';
 @infiles = ($STDIN) unless @infiles;
 
 # ---- Run conversion ------------------------------------------------------

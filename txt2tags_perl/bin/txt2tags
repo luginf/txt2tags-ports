@@ -37,15 +37,19 @@ GetOptions(
     'toc-only'          => \$cli_opts{'toc-only'},
     'toc-level=i'       => \$cli_opts{'toc-level'},
     'encoding=s'        => \$cli_opts{encoding},
-    'headers!'          => \$cli_opts{headers},
-    'enum-title'        => \$cli_opts{'enum-title'},
+    'headers'           => sub { $cli_opts{headers} = 1 },
+    'no-headers|H'      => sub { $cli_opts{headers} = 0 },
+    'enum-title|n'      => \$cli_opts{'enum-title'},
+    'toc-title=s'       => \$cli_opts{'toc-title'},
+    'chars=s'           => \$cli_opts{chars},
+    'infile|i=s'        => \$cli_opts{infile},
     'mask-email'        => \$cli_opts{'mask-email'},
     'style=s'           => \$cli_opts{style},
     'css-sugar'         => \$cli_opts{'css-sugar'},
     'css-inside'        => \$cli_opts{'css-inside'},
     'width=i'           => \$cli_opts{width},
     'height=i'          => \$cli_opts{height},
-    'config-file=s'     => \$cli_opts{'config-file'},
+    'config-file|C=s'   => \$cli_opts{'config-file'},
     'template|T=s'      => \$cli_opts{template},
     'fix-path'          => \$cli_opts{'fix-path'},
     'embed-images'      => \$cli_opts{'embed-images'},
@@ -126,6 +130,8 @@ if ($rc_path && -f $rc_path) {
         width        => 'width',
         height       => 'height',
         'toc-level'  => 'toc-level',
+        'toc-title'  => 'toc-title',
+        chars        => 'chars',
         template     => 'template',
         'config-file'=> 'config-file',
     );
@@ -155,6 +161,7 @@ if ($rc_path && -f $rc_path) {
 # ---- Collect infiles from remaining ARGV ---------------------------------
 
 my @infiles = @ARGV;
+unshift @infiles, $cli_opts{infile} if defined $cli_opts{infile} && $cli_opts{infile} ne '';
 @infiles = ($STDIN) unless @infiles;
 
 # ---- Run conversion ------------------------------------------------------

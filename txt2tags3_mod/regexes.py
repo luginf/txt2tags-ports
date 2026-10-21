@@ -109,7 +109,7 @@ def getRegexes():
         "login": r"A-Za-z0-9_.-",  # for ftp://login@domain.com
         "pass": r"[^ @]*",  # for ftp://login:pass@dom.com
         "chars": r"A-Za-z0-9%._/~:,=$@&+-",  # %20(space), :80(port), D&D
-        "anchor": r"A-Za-z0-9%._-",  # %nn(encoded)
+        "anchor": r"\w%.-",  # %nn(encoded), and accents (md anchors keep them)
         "form": r"A-Za-z0-9/%&=+:;.,$@*_-",  # .,@*_-(as is)
         "punct": r".,;:!?",
     }

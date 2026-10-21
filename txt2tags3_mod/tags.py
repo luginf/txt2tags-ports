@@ -1269,12 +1269,13 @@ def getTags(config):
         # http://daringfireball.net/projects/markdown/dingus
         # http://michelf.com/projects/php-markdown/dingus/
         "md": {
-            "title1": "# \a ",
-            "title2": "## \a ",
-            "title3": "### \a ",
-            "title4": "#### \a ",
-            "title5": "##### \a ",
-            "blockVerbLine": "    ",
+            "title1": "# \a",
+            "title2": "## \a",
+            "title3": "### \a",
+            "title4": "#### \a",
+            "title5": "##### \a",
+            "blockVerbOpen": "```",
+            "blockVerbClose": "```",
             "blockQuoteLine": "> ",
             "fontMonoOpen": "`",
             "fontMonoClose": "`",
@@ -1288,11 +1289,13 @@ def getTags(config):
             "fontStrikeClose": "~~",
             # Lists
             #'listOpenCompact'     : '*'             ,
-            "listItemLine": " ",
+            "listItemLine": "    ",
             "listItemOpen": "*",
-            #'numlistItemLine'     : '1.'            ,
+            "numlistItemLine": "    ",
             "numlistItemOpen": "1.",
-            "deflistItem1Open": ": ",
+            "deflistItem1Open": "\n**",
+            "deflistItem1Close": "**  ",
+            "deflistItem2Close": "",
             #'deflistItem1Close'     : ':'           ,
             #'deflistItem2LineOpen'  : '::'          ,
             #'deflistItem2LineClose' : ':'           ,
@@ -1305,7 +1308,7 @@ def getTags(config):
             "url": "\a",
             "urlMark": "[\a](\a)",
             "email": "\a",
-            #'emailMark'             : '[[\a -> mailto:\a]]',
+            "emailMark": "[\a](mailto:\a)",
             #'anchor'                : '[[#\a]]\n'   ,
             # Image markup
             "img": "![](\a)",
@@ -1314,11 +1317,11 @@ def getTags(config):
             #'imgAlignCenter'       : '{{ \a }}'     ,
             # Table attributes
             "tableTitleRowOpen": "| ",
-            "tableTitleRowClose": "|\n|---------------|",
-            "tableTitleCellSep": " |",
-            "tableRowOpen": "|",
-            "tableRowClose": "|",
-            "tableCellSep": " |",
+            "tableTitleRowClose": " |",
+            "tableTitleCellSep": " | ",
+            "tableRowOpen": "| ",
+            "tableRowClose": " |",
+            "tableCellSep": " | ",
         },
         # gemtext (gemini) https://gemini.circumlunar.space/docs/gemtext.gmi
         "gmi": {

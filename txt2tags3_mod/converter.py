@@ -231,7 +231,7 @@ def convert_this_files(configs):
         tagged_toc = toc_tagger(marked_toc, myconf)
         target_toc = toc_formatter(tagged_toc, myconf)
         target_body = toc_inside_body(target_body, target_toc, myconf)
-        if not AUTOTOC and not myconf["toc-only"]:
+        if not state.AUTOTOC and not myconf["toc-only"]:
             target_toc = []
         # Finally, we have our document
         myconf["fullBody"] = target_toc + target_body + target_foot
@@ -1283,6 +1283,22 @@ def convert(bodylines, config, firstlinenr=1):
             # Closing sublists
             while len(listitemindent) < len(state.BLOCK.prop("indent")):
                 ret.extend(state.BLOCK.blockout())
+
+            # A definition list never shares a list with other kinds: after
+            # the sublists closed, a term over a "- " list (or the reverse)
+            # starts a new list instead of becoming one of its items
+            if (
+                state.BLOCK.block().endswith("list")
+                and listname != state.BLOCK.block()
+                and "deflist" in (listname, state.BLOCK.block())
+            ):
+                ret.extend(state.BLOCK.blockout())
+                if not state.BLOCK.block().endswith("list") or len(
+                    listitemindent
+                ) > len(state.BLOCK.prop("indent")):
+                    ret.extend(state.BLOCK.blockin(listname))
+                    state.BLOCK.propset("indent", listitemindent)
+                    state.BLOCK.propset("type", listtype)
 
             # O-oh, sublist before list ("\n\n  - foo\n- foo")
             # Fix: close sublist (as mother), open another list

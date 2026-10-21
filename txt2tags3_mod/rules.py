@@ -47,6 +47,10 @@ def getRules(config):
         "listitemnotnested",  # list items must be closed before nesting lists
         "quotenotnested",  # quotes cannot be nested
         "verbblocknotescaped",  # don't escape specials in verb block
+        "monoinlinenotescaped",  # don't escape specials in inline monospaced text
+        "verbfence",  # verb block fence grows past any run of its own characters
+        "tocgithubanchors",  # TOC links to the anchors GitHub gives the titles
+        "parastrip",  # strip the blanks around each paragraph line
         "verbblockfinalescape",  # do final escapes in verb block
         "escapeurl",  # escape special in link URL
         "labelbeforelink",  # label comes before the link on the tag
@@ -108,6 +112,11 @@ def getRules(config):
         "depthmultiplyplus",  # add to block depth before multiplying
         "cellspanmultiplier",  # cell span is multiplied by this value
         "spreadmarkup",  # the markup spread engine option: 'txt', 'html' or 'tex'
+        "quotespacedmotheronly",  # blank lines around quotes only at the outermost level
+        "listlinefromzero",  # ItemLine is repeated depth-1 times (top level is not indented)
+        "listcontwidth",  # indent width of list item continuation lines (marker width)
+        "numlistcontwidth",  # same, for numbered lists
+        "deflistcontwidth",  # same, for definition lists
     ]
 
     rules_bank = {
@@ -669,13 +678,25 @@ def getRules(config):
             "spacedlistitemopen": 1,
             "spacednumlistitemopen": 1,
             "deflisttextstrip": 1,
+            "verbblocknotescaped": 1,
+            "monoinlinenotescaped": 1,
+            "verbfence": 1,
+            "tocgithubanchors": 1,
+            "parastrip": 1,
+            "quotespacedmotheronly": 1,
+            "listlinefromzero": 1,
+            "listcontwidth": 2,
+            "numlistcontwidth": 3,
             "blanksaroundpara": 1,
+            "blanksaroundverb": 1,
+            "blanksaroundquote": 1,
             "blanksaroundlist": 1,
             "blanksaroundnumlist": 1,
-            #'blanksarounddeflist': 1,
+            "blanksarounddeflist": 1,
             "blanksaroundtable": 1,
             "blanksaroundbar": 1,
             "blanksaroundtitle": 1,
+            "blanksaroundnumtitle": 1,
         },
         "gmi": {
             #'keeplistindent': 1,

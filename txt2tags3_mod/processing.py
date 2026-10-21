@@ -83,8 +83,6 @@ class MaskMaster:
         self.math_masks = []
 
     def mask(self, line=""):
-        global AUTOTOC
-
         # The verbatim, raw, tagged and math inline marks are mutually exclusive.
         # This means that one can't appear inside the other.
         # If found, the inner marks must be ignored.
@@ -137,7 +135,8 @@ class MaskMaster:
             # Protect verbatim text
             elif v >= 0 and v < t and v < r and v < m:
                 txt = state.regex["fontMono"].search(line).group(1)
-                txt = doEscape(state.TARGET, txt)
+                if not state.rules["monoinlinenotescaped"]:
+                    txt = doEscape(state.TARGET, txt)
                 i = len(self.monobank)
                 self.monobank.append(txt)
                 mask = self.monomask.replace("NNN", str(i))
@@ -166,7 +165,7 @@ class MaskMaster:
         # Protect TOC location
         while state.regex["toc"].search(line):
             line = state.regex["toc"].sub(self.tocmask, line)
-            AUTOTOC = 0
+            state.AUTOTOC = 0
 
         # Protect URLs and emails
         while state.regex["linkmark"].search(line) or state.regex["link"].search(line):
@@ -518,12 +517,11 @@ class TitleMaster:
 
     def _get_full_title_text(self):
         "Returns the full title contents, already escaped."
-        ret = self.txt
+        # Escape specials (the count_id is made of digits and dots only)
+        ret = doEscape(state.TARGET, self.txt)
         # Insert count_id (if any) before text
         if self.count_id:
             ret = "%s %s" % (self.count_id, ret)
-        # Escape specials
-        ret = doEscape(state.TARGET, ret)
         # Same targets needs final escapes on title lines
         # It's here because there is a 'continue' after title
         if state.rules["finalescapetitle"]:
@@ -600,6 +598,23 @@ class TitleMaster:
             ret.append(tagged)
         return ret
 
+    def _github_slugs(self):
+        "GitHub's anchor for each title: lowercase, spaces to hyphens, punctuation dropped, -1, -2 for repeats"
+        seen = {}
+        slugs = []
+        for level, count_id, txt, label in self.toc:
+            text = ("%s %s" % (count_id, txt)).lstrip()
+            text = re.sub(r"\[([^\]]*?)\s+\S+\]", r"\1", text)  # [label url] -> label
+            text = re.sub(r"\*\*|//|__|--|``|[\\*`~]", "", text)
+            base = "".join(
+                c.lower() if c.isalnum() or c in "-_" else "-" if c.isspace() else ""
+                for c in text
+            )
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            slugs.append(base if n == 0 else "%s-%d" % (base, n))
+        return slugs
+
     def dump_marked_toc(self, max_level=99):
         "Dumps all toc itens as a valid t2t-marked list"
         ret = []
@@ -607,7 +622,8 @@ class TitleMaster:
         head = 0
         if state.CONF["headers"] and state.CONF["header1"]:
             head = 1
-        for level, count_id, txt, label in self.toc:
+        slugs = self._github_slugs() if state.rules["tocgithubanchors"] else None
+        for n, (level, count_id, txt, label) in enumerate(self.toc):
             if level > max_level:  # ignore
                 continue
             indent = "  " * level
@@ -618,6 +634,11 @@ class TitleMaster:
                     label = str(state.AA_PW_TOC[txt] / state.CONF["height"] + head + 2) + ".0"
             label = label or self.anchor_prefix + str(toc_count)
             toc_count += 1
+
+            # Markdown: link to the anchor the renderer gives each title
+            if slugs is not None:
+                ret.append('%s- [""%s"" #%s]' % (indent, id_txt, slugs[n]))
+                continue
 
             # TOC will have crosslinks to anchors
             if state.TAGS["anchor"]:
@@ -821,6 +842,8 @@ class TableMaster:
         # Cells pre processing
         if state.rules["tablecellstrip"]:
             cells = [x.strip() for x in cells]
+        if state.TARGET == "md":
+            cells = [x.replace("|", "\\|") for x in cells]  # a bar would end the cell
         if rowdata["title"] and state.rules["tabletitlerowinbold"]:
             cells = [enclose_me("fontBold", x) for x in cells]
 
@@ -1020,6 +1043,17 @@ class TableMaster:
             else:
                 close = rowopen + close
 
+        # Markdown (GFM) tables need a header row and one alignment cell per
+        # column; without a title row, use an empty one
+        md_align_row = ""
+        md_empty_header = ""
+        if state.TARGET == "md" and rows:
+            first = rows[0]
+            aligns = {"Left": "---", "Center": ":---:", "Right": "---:"}
+            md_align_row = "\n|" + "|".join(aligns[a] for a in first["cellalign"]) + "|"
+            if not first["title"]:
+                md_empty_header = "|" + "|".join("  " for _ in first["cellalign"]) + "|"
+
         # Now we tag all the table cells on each row
         # tagged_cells = map(lambda x: self._tag_cells(x), rows)  #!py15
         tagged_cells = []
@@ -1041,8 +1075,7 @@ class TableMaster:
                 if rowdata["title"]:
                     o, c = titrowopen, titrowclose
                     if state.TARGET == "md":
-                        # GFM needs one "---" separator cell per header cell
-                        c = "|\n|" + "---|" * len(rowdata["cellspan"])
+                        c = titrowclose + md_align_row
                 else:
                     o, c = rowopen, rowclose
                 row = tagged_cells.pop(0)
@@ -1099,6 +1132,9 @@ class TableMaster:
 
                 else:
                     tagged_rows.append(o + row + c)
+
+        if md_empty_header:
+            tagged_rows[0:0] = [md_empty_header + md_align_row]
 
         # Join the pieces together
         fulltable = []
@@ -1418,6 +1454,8 @@ class BlockMaster:
         # Nestable blocks: only mother blocks (level 1) are spaced
         if blockname.endswith("list") and self.depth > 1:
             return False
+        if blockname == "quote" and self.depth > 1 and state.rules["quotespacedmotheronly"]:
+            return False
 
         # The blank line after the block is always added
         if where == "after" and state.rules["blanksaround" + blockname]:
@@ -1477,16 +1515,21 @@ class BlockMaster:
 
     def raw(self):
         lines = self.hold()
-        return [doEscape(state.TARGET, x) for x in lines]
+        lines = [doEscape(state.TARGET, x) for x in lines]
+        # Markdown: raw and tagged text are blocks of their own
+        return [""] + lines + [""] if state.TARGET == "md" and lines else lines
 
     def tagged(self):
-        return self.hold()
+        lines = self.hold()
+        return [""] + lines + [""] if state.TARGET == "md" and lines else lines
 
     def para(self):
         result = []
         open_ = state.TAGS["paragraphOpen"]
         close = state.TAGS["paragraphClose"]
         lines = self._get_escaped_hold()
+        if state.rules["parastrip"]:
+            lines = [x.strip() for x in lines]
 
         # Blank line before?
         if self._should_add_blank_line("before", "para"):
@@ -1541,6 +1584,11 @@ class BlockMaster:
         # Blank line before?
         if self._should_add_blank_line("before", "verb"):
             result.append("")
+
+        # A fence must be longer than any run of its own character in the code
+        if state.rules["verbfence"] and open_:
+            longest = max([len(m) for line in self.hold() for m in re.findall(re.escape(open_[0]) + "+", line)] + [len(open_) - 1])
+            open_ = close = open_[0] * (longest + 1)
 
         # Open tag
         if open_:
@@ -1904,11 +1952,15 @@ class BlockMaster:
         itemopen = self._apply_list_level(itemopen, self.depth)
 
         # ItemLine: number of leading chars identifies list depth
+        listreps = self.depth - 1 if state.rules["listlinefromzero"] else self.depth
         if listline:
             if state.rules["listlineafteropen"]:
-                itemopen = itemopen + listline * self.depth
+                itemopen = itemopen + listline * listreps
             else:
-                itemopen = listline * self.depth + itemopen
+                itemopen = listline * listreps + itemopen
+        # Continuation lines of an item are indented under its text (markdown)
+        contwidth = state.rules[name + "contwidth"]
+        contpad = " " * (len(listline or "") * listreps + contwidth) if contwidth else ""
 
         # Adds trailing space on opening tags
         if (name == "list" and state.rules["spacedlistitemopen"]) or (
@@ -2001,6 +2053,9 @@ class BlockMaster:
                     # Maybe we have a line prefix to add? (wiki)
                     if name == "deflist" and state.TAGS["deflistItem2LinePrefix"]:
                         line = state.TAGS["deflistItem2LinePrefix"] + line
+
+                    if contpad and line.strip():
+                        line = contpad + line.strip()
 
                     if state.TARGET == "aat":
                         indent = " " * (len(line) - len(line.lstrip()))

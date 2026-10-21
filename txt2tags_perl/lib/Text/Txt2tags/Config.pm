@@ -171,7 +171,7 @@ sub scan {
 
         if ($line =~ /\S/) {
             my $is_comment = substr($line, 0, 1) eq '%';
-            my $is_macro   = $line =~ $rgx->{macros};
+            my $is_macro   = $line =~ /^$rgx->{macros}/;
             my $is_toc     = $line =~ $rgx->{toc};
             my $is_include = ($cfg_parser->parse_line($line, 'include'))[1];
             my $is_csv     = ($cfg_parser->parse_line($line, 'csv'))[1];
@@ -414,9 +414,44 @@ sub _parse_prepost_value {
     return [ $tokens[0] // '', $tokens[1] // '' ];
 }
 
+# The command line options a `%!options:` line may carry, as raw
+# [target, key, value] triples. Actions, --target and unknown options are
+# ignored, as in the Python port.
+sub options_to_raw {
+    my ($str) = @_;
+    require Getopt::Long;
+    require Text::ParseWords;
+    my @words = Text::ParseWords::shellwords($str // '');
+    my @raw;
+    my %spec;
+    for my $flag (qw(toc toc-only enum-title mask-email css-sugar css-inside
+                     fix-path embed-images blank-closes-list skip-header-lines
+                     legacy quiet)) {
+        $spec{$flag}       = sub { push @raw, ['all', $flag, ''] };
+        $spec{"no-$flag"}  = sub { push @raw, ['all', "no-$flag", ''] };
+    }
+    $spec{'headers'}       = sub { push @raw, ['all', 'headers', ''] };
+    $spec{'no-headers|H'}  = sub { push @raw, ['all', 'no-headers', ''] };
+    $spec{'enum-title|n'}  = $spec{'enum-title'};
+    delete $spec{'enum-title'};
+    for my $opt (qw(encoding toc-level toc-title style chars width height
+                    template config-file)) {
+        $spec{"$opt=s"} = sub { push @raw, ['all', $opt, $_[1]] };
+    }
+    my $parser = Getopt::Long::Parser->new(config => [qw(bundling pass_through)]);
+    $parser->getoptionsfromarray(\@words, %spec);
+    return \@raw;
+}
+
 sub add {
     my ($self, $key, $val) = @_;
     $val //= '';
+
+    # %!options: the value is a command line, every option in it is added
+    if ($key eq 'options') {
+        $self->add(@$_[1, 2]) for @{ options_to_raw($val) };
+        return;
+    }
 
     # no- prefix = turn OFF
     if ($key =~ s/^no-//) {
@@ -553,6 +588,12 @@ sub sanity {
     # Default width for ASCII Art
     if ($target eq 'aat') {
         $config->{width} ||= Text::Txt2tags::Constants::DFT_TEXT_WIDTH();
+    }
+
+    # --toc-only is stronger than others
+    if ($config->{'toc-only'}) {
+        $config->{headers} = 0;
+        $config->{split}   = 0;
     }
 
     # Determine output file name if not already set

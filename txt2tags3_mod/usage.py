@@ -621,9 +621,11 @@ Date: %(HEADER3)s
 %(HEADER3)s
 """,
     "md": """\
-%(HEADER1)s
+# %(HEADER1)s
+
 %(HEADER2)s
 %(HEADER3)s
+
 """,
     "gmi": """\
 # %(HEADER1)s

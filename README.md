@@ -8,7 +8,7 @@ Each [GitHub release](https://github.com/luginf/txt2tags-ports/releases) attache
 
 - `txt2tags.py` - single-file Python 3 build (no dependency)
 - `txt2tags.pl` - single-file Perl 5 build (no dependency)
-- `txt2tags-go-linux-amd64` and `txt2tags-rust-linux-amd64` - HTML/LaTeX binaries of the small Go and Rust ports
+- `txt2tags-go-linux-amd64` and `txt2tags-rust-linux-amd64` - HTML/LaTeX/Markdown binaries of the small Go and Rust ports
 
 ```bash
 python3 txt2tags.py -t html input.t2t
@@ -31,7 +31,7 @@ Markup syntax, config lines, command line, targets, and what each port supports.
 | Port | Targets | Language coverage |
 |---|---|---|
 | `txt2tags3_mod` (Python), `txt2tags_perl` | 45 targets | full |
-| `txt2tags_go`, `txt2tags_rust` | html, tex | subset, identical output between the two |
+| `txt2tags_go`, `txt2tags_rust` | html, tex, md | subset, identical output between the two; Markdown identical to the Python and Perl ports |
 | `txt2tags_lua`, `txt2tags_tcl` | html, tex (Lua) / html (Tcl) | simpler subset |
 
 ## Differences from upstream txt2tags
@@ -41,6 +41,29 @@ Markup syntax, config lines, command line, targets, and what each port supports.
 - `--blank-closes-list`: a single blank line closes a list (unless the next
   line continues it).
 - `--skip-header-lines`: no 3-line header, the body starts on line 1.
+- Markdown output (`-t md`) is GitHub-flavoured and escapes literal `*`, `_`, `<`, `>`, `#` and `1.`;
+  nested lists, definition lists, table alignment and the title/author/date header render correctly.
+- All four ports that export Markdown (Python, Perl, Go, Rust) give the same
+  `-t md` output on the common subset.
+  HTML and LaTeX are only the same between the full ports, and between Go and Rust.
+- `-n` / `--enum-title` works in the Perl port too, and `%%toc` no longer leaves a `vvvTOCvvv`
+  placeholder in the output of the Python port.
+
+## Go and Rust command line
+
+The Go and Rust binaries take the same options as the Python port, within what they support
+(`txt2tags --help` lists them, `txt2tags --targets` shows `html`, `md` and `tex`):
+
+```bash
+txt2tags-go-linux-amd64 -t md --toc -n file.t2t     # writes file.md
+txt2tags-rust-linux-amd64 -t html -H -o - file.t2t  # body only, on stdout
+```
+
+Supported: `-t`, `-o`, `-i`, `-H`, `--toc`, `--toc-level`, `--toc-title`, `--toc-only`, `-n`,
+`--skip-header-lines`, `--encoding` (UTF-8 only), `--dump-source`, `--dump-config`, `-q`, `-v`,
+`-V`, `-h`, `--no-` prefix, `--no-rc`. Options that need CSS, templates, rc files or other
+targets (`--style`, `-T`, `-C`, `--mask-email`, `--width`...) stop with an error.
+As in the Python port the result goes to `file.<target>` unless `-o` says otherwise.
 
 ## txt2tags3_mod (Python 3, primary port)
 

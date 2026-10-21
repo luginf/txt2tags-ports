@@ -26,6 +26,8 @@ Rust, Lua and Tcl ports support.
 
 Pick whichever form suits you; all of them take the same options.
 
+You can get them at [https://github.com/luginf/txt2tags-ports https://github.com/luginf/txt2tags-ports]
+
 || Form | Command |
 | Python single file | ``python3 txt2tags.py -t html file.t2t`` |
 | Python package | ``python3 -m txt2tags3_mod -t html file.t2t`` |
@@ -33,7 +35,7 @@ Pick whichever form suits you; all of them take the same options.
 | Perl from sources | ``perl -Ilib bin/txt2tags -t html file.t2t`` |
 
 The single files ``txt2tags.py`` and ``txt2tags.pl`` are attached to each
-GitHub release. They have no dependency besides Python 3 or Perl 5. Both are
+[GitHub release https://github.com/luginf/txt2tags-ports/releases]. They have no dependency besides Python 3 or Perl 5. Both are
 generated: ``python3 txt2tags3_mod/bundle.py`` writes
 ``txt2tags3_mod/out/txt2tags.py`` and ``perl txt2tags_perl/bundle.pl`` writes
 ``txt2tags_perl/out/txt2tags.pl``.
@@ -126,8 +128,8 @@ also closes an open list (see [Lists #lists]).
 | strike | ``--strike--`` |
 | monospaced | ````mono```` |
 
-Marks must hug their text: ``** not bold **`` is left alone, and a mark glued
-to a word on the outside (``2**3**4``) is not markup either. Marks can be
+Marks must hug their text: ``** not bold **`` is left alone. What sits
+outside a mark does not matter (``a--b--c`` has a struck b). Marks can be
 combined (``**//bold italic//**``).
 
 == Paragraphs, line breaks, comments ==
@@ -250,9 +252,19 @@ get plain-text ones.
 | ``%%mtime`` | modification time of the source, same format argument |
 | ``%%infile`` | input file name |
 | ``%%outfile`` | output file name |
+| ``%%currentfile`` | file being read (differs from ``%%infile`` in an include) |
+| ``%%target`` | target name (``html``, ``md``, ``tex``...) |
+| ``%%encoding`` | the encoding |
+| ``%%appname``, ``%%appurl``, ``%%appversion`` | name, address and version of the program |
+| ``%%header1``, ``%%header2``, ``%%header3`` | title, author and date of the document |
 | ``%%toc`` | the table of contents, at this position |
 
-Macro names are case insensitive. A table of contents can also be requested with ``--toc`` (``--toc-level=N``
+Macro names are case insensitive. ``%%date`` and ``%%mtime`` are in UTC (the C
+locale); ``SOURCE_DATE_EPOCH`` fixes the time for reproducible builds. The file
+macros take the format flags ``%f`` (file name), ``%F`` (without the
+extension), ``%d`` (directory), ``%D`` (directory name), ``%p`` (path) and ``%e``
+(extension). Macros are expanded in running text only, not in verbatim, raw or
+tagged blocks nor inside a mono span. A table of contents can also be requested with ``--toc`` (``--toc-level=N``
 sets the depth, ``--toc-title=S`` the title, ``--toc-only`` prints only it).
 
 
@@ -388,7 +400,8 @@ The ``*s`` and ``htmls`` targets render spreadsheet-like output.
 
 The Go, Rust, Lua and Tcl ports re-implement a subset of the language with
 their own small code base. They read the same ``.t2t`` files but only produce
-HTML and LaTeX (``-t html`` or ``-t tex``; Tcl does HTML only).
+HTML, LaTeX and (Go and Rust) Markdown: ``-t html``, ``-t tex``, ``-t md``.
+Lua does HTML and LaTeX, Tcl HTML only.
 
 | Feature | Go | Rust | Lua | Tcl |
 | Header, titles, paragraphs, lists, tables, inline marks | yes | yes | yes | yes |
@@ -399,9 +412,28 @@ HTML and LaTeX (``-t html`` or ``-t tex``; Tcl does HTML only).
 | ``%%date``, ``%%toc`` | yes | yes | yes | no |
 | ``%!preproc`` / ``%!postproc`` | yes | yes | no | no |
 
-Go and Rust produce identical output. Their bare URLs follow the same rules as
+Go and Rust follow the Python port rules for what they cover. Their Markdown
+output (``-t md``) is meant to be byte for byte the one of the Python and Perl
+ports. The repository checks this on many sample files, with and without
+``--toc -n``.
+HTML and LaTeX are not meant to be the same as the full ports: their markup is
+simpler. A mark only needs its inside to hug the text, a backslash is plain
+text (so ``\**x**`` is a backslash followed by bold), a ``%%toc`` needs ``--toc``
+to print anything, and ``%!options:`` lines of the document are honored (the
+command line wins). Quotes (tab-indented lines), ``+ numbered +`` titles,
+``[label]`` after a title and one-line verbatim, raw and tagged blocks work as well.
+
+Go and Rust produce identical output, and take the options of the Python port
+that apply to their three targets: ``-t``, ``-o``, ``-i``, ``-H``, ``--toc``,
+``--toc-level``, ``--toc-title``, ``--toc-only``, ``-n`` (html and md),
+``--skip-header-lines``, ``--encoding`` (UTF-8 only), ``--dump-source``,
+``--dump-config``, ``-q``, ``-v``, ``-V``, ``-h``, ``--targets``, the ``no-``
+prefix and ``--no-rc``. The options that need CSS, templates, rc files or other
+targets (``--style``, ``-T``, ``-C``, ``--mask-email``, ``--width``...) stop
+with an error. As in the Python port the result is written to
+``file.<target>``; ``-o -`` prints it. Their bare URLs follow the same rules as
 the reference: a URL stops at brackets, quotes and spaces, and drops trailing
-``.,;:!?``. They have no includes, quotes, numbered titles or other targets;
+``.,;:!?``. They have no includes or other targets;
 use the Python or Perl versions for those.
 
-Binaries for Go and Rust are attached to the GitHub releases.
+Binaries for Go and Rust are attached to the [GitHub releases https://github.com/luginf/txt2tags-ports/releases].

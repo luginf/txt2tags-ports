@@ -183,6 +183,8 @@ def finish_him(outlist, config):
     outfile = config["outfile"]
     outlist = unmaskEscapeChar(outlist)
     outlist = expandLineBreaks(outlist)
+    if config["target"] == "md":
+        outlist = tidy_markdown(outlist)
 
     # Apply PostProc filters
     if config["postproc"]:
@@ -249,8 +251,8 @@ def finish_him(outlist, config):
             return outlist, config
         else:
             for line in outlist:
-                if isinstance(line, str):
-                    line = line.encode("utf-8")
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
                 print(line)
     else:
         if not config["target"] == "db":
@@ -276,7 +278,7 @@ def finish_him(outlist, config):
 def toc_inside_body(body, toc, config):
     from .processing import MaskMaster
     ret = []
-    if AUTOTOC:
+    if state.AUTOTOC:
         return body  # nothing to expand
     toc_mark = MaskMaster().tocmask
     # Expand toc mark with TOC contents
@@ -383,7 +385,7 @@ def toc_formatter(toc, config):
         ret.append(state.TAGS["tocClose"])
 
     # Autotoc specific formatting
-    if AUTOTOC:
+    if state.AUTOTOC:
         if state.rules["autotocwithbars"]:  # TOC between bars
             para = state.TAGS["paragraphOpen"] + state.TAGS["paragraphClose"]
             bar = state.regex["x"].sub("-" * DFT_TEXT_WIDTH, state.TAGS["bar1"])
@@ -473,7 +475,13 @@ def doHeader(headers, config):
         if target == "lout":
             contents = doFinalEscape(target, contents)
 
+        if target == "md":
+            contents = contents.strip()
         head_data["HEADER%d" % (i + 1)] = contents
+
+    # Markdown: a hard line break ends the author line when a date follows
+    if target == "md" and head_data["HEADER2"] and head_data["HEADER3"]:
+        head_data["HEADER2"] += "  "
 
     # When using --css-inside, the template's <STYLE> line must be removed.
     # Template line removal for empty header keys is made some lines above.
@@ -760,6 +768,19 @@ def doEscape(target, txt):
         txt = re.sub("([<|>])", r"$\1$", txt)  # $>$
         txt = txt.replace(tmpmask, maskEscapeChar(r"$\backslash$"))
         # TIP the _ is escaped at the end
+    elif target == "md":
+        # Keep literal text from being read as markdown. The doubled marks
+        # (**, ``) are txt2tags marks, only the single characters are escaped.
+        def esc(m):
+            return "\\" + m.group(0)
+
+        txt = txt.replace(ESCCHAR, ESCCHAR * 2)  # a literal backslash
+        txt = re.sub(r"(?<!\*)\*(?!\*)", esc, txt)
+        txt = re.sub(r"(?<!`)`(?!`)", esc, txt)
+        txt = re.sub(r"(?<![_\w])_(?!_)|(?<!_)_(?![_\w])", esc, txt)
+        txt = re.sub(r"[<>]", esc, txt)
+        txt = re.sub(r"^(\s*)(#{1,6})(\s|$)", lambda m: m.group(1) + "\\" + m.group(2) + m.group(3), txt)
+        txt = re.sub(r"^(\s*)(\d+)\.(\s)", lambda m: m.group(1) + m.group(2) + "\\." + m.group(3), txt)
     elif target == "rtf":
         txt = txt.replace(ESCCHAR, ESCCHAR + ESCCHAR)
         txt = re.sub("([{}])", ESCCHAR + r"\1", txt)
@@ -826,6 +847,29 @@ def addLineBreaks(mylist):
 
 
 # Convert ['foo\nbar'] to ['foo', 'bar']
+def tidy_markdown(lines):
+    """One blank line between blocks, none at the start or the end, and the
+    content of fenced code blocks left as it is."""
+    out = []
+    fence = None
+    for line in lines:
+        if fence is not None:
+            out.append(line)
+            if line == fence:
+                fence = None
+        elif re.match(r"^`{3,}$", line):
+            fence = line
+            out.append(line)
+        elif line.strip() == "":
+            if out and out[-1] != "":
+                out.append("")
+        else:
+            out.append(line)
+    while out and out[-1] == "":
+        out.pop()
+    return out
+
+
 def expandLineBreaks(mylist):
     ret = []
     for line in mylist:

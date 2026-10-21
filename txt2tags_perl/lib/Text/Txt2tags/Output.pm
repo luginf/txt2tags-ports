@@ -54,6 +54,17 @@ sub doEscape {
     elsif ($target eq 'pm6') {
         $txt =~ s/</\<\\#60\>/g;
     }
+    elsif ($target eq 'md') {
+        # Keep literal text from being read as markdown. The doubled marks
+        # (**, ``) are txt2tags marks, only the single characters are escaped.
+        $txt =~ s/\Q$ESCCHAR\E/$ESCCHAR$ESCCHAR/g;    # a literal backslash
+        $txt =~ s/(?<!\*)\*(?!\*)/\\*/g;
+        $txt =~ s/(?<!`)`(?!`)/\\`/g;
+        $txt =~ s/(?<![_\w])_(?!_)|(?<!_)_(?![_\w])/\\_/g;
+        $txt =~ s/([<>])/\\$1/g;
+        $txt =~ s/^(\s*)(#{1,6})(\s|$)/$1\\$2$3/;
+        $txt =~ s/^(\s*)(\d+)\.(\s)/$1$2\\.$3/;
+    }
     elsif ($target eq 'mgp') {
         $txt =~ s/^%/ %/mg;
     }
@@ -136,6 +147,31 @@ sub addLineBreaks {
     return \@ret;
 }
 
+# One blank line between blocks, none at the start or the end, and the
+# content of fenced code blocks left as it is.
+sub tidy_markdown {
+    my ($list) = @_;
+    my (@out, $fence);
+    for my $line (@$list) {
+        if (defined $fence) {
+            push @out, $line;
+            undef $fence if $line eq $fence;
+        }
+        elsif ($line =~ /^`{3,}$/) {
+            $fence = $line;
+            push @out, $line;
+        }
+        elsif ($line =~ /^\s*$/) {
+            push @out, '' if @out && $out[-1] ne '';
+        }
+        else {
+            push @out, $line;
+        }
+    }
+    pop @out while @out && $out[-1] eq '';
+    return \@out;
+}
+
 sub expandLineBreaks {
     my ($list) = @_;
     my @ret;
@@ -215,6 +251,10 @@ sub get_tagged_link {
 
     my $is_email = ($url =~ /^[\w.+-]+\@[\w.-]+\.[A-Za-z]{2,4}/);
     my $is_img   = ($url =~ /\.(png|jpe?g|gif|eps|bmp|svg)$/i);
+
+    # A guessed address (www.x.org, ftp.x.org) is a named link: its own text
+    # is the label and the protocol is added to the target
+    $label = $url if !$label && !$is_email && $rules{linkable} && $url =~ /^(?:www[23]?|ftp)\./i;
 
     my ($open_tag, $close_tag);
 
@@ -392,6 +432,7 @@ sub finish_him {
     }
     $outlist = unmaskEscapeChar($outlist);
     $outlist = expandLineBreaks($outlist);
+    $outlist = tidy_markdown($outlist) if $config->{target} eq 'md';
 
     # Apply postproc filters
     if ($config->{postproc} && @{ $config->{postproc} }) {
@@ -433,6 +474,8 @@ sub finish_him {
         my @all;
         push @all, @{ $Text::Txt2tags::State::file_dict{$_} // [] }
             for keys %Text::Txt2tags::State::file_dict;
+        # the lines are decoded characters (input is read as UTF-8)
+        binmode(STDOUT, ':encoding(UTF-8)');
         print "$_\n" for @all;
     }
     else {
@@ -690,7 +733,7 @@ END_HTMLS
 END_TEX
     man => ".TH \"%(HEADER1)s\" 1 \"%(HEADER3)s\" \"%(HEADER2)s\"\n",
     rst => '',
-    md  => "%(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
+    md  => "# %(HEADER1)s\n\n%(HEADER2)s\n%(HEADER3)s\n\n",
     adoc=> "= %(HEADER1)s\n%(HEADER2)s\n%(HEADER3)s\n",
     sgml => <<'END_SGML',
 <!doctype linuxdoc system>
@@ -1026,6 +1069,10 @@ sub _build_head_data {
         HEADER3  => $headers->[2] // '',
         BODY     => join("\n", @{ $config->{fullBody} // [] }),
     );
+    if ($target eq 'md') {
+        s/^\s+|\s+$//g for @d{qw(HEADER1 HEADER2 HEADER3)};
+        $d{HEADER2} .= '  ' if length $d{HEADER2} && length $d{HEADER3};
+    }
     if ($config->{style} && @{ $config->{style} }) {
         my $sty = $config->{style}[0];
         # LaTeX requires \usepackage{name} without the .sty extension
@@ -1177,7 +1224,7 @@ sub get_file_body {
 our @EXPORT_OK = qw(
     get_escapes doProtect doEscape doFinalEscape
     EscapeCharHandler maskEscapeChar unmaskEscapeChar
-    addLineBreaks expandLineBreaks compile_filters
+    addLineBreaks expandLineBreaks tidy_markdown compile_filters
     enclose_me get_tagged_link parse_deflist_term
     get_image_align get_encoding_string
     doCommentLine doHeader doFooter finish_him
