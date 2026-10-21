@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>txt2tags manual</title>
+<meta name="generator" content="http://txt2tags.org">
+<link rel="stylesheet" href="manual.css">
+<style>
+body{background-color:#fff;color:#000;}
+hr{background-color:#000;border:0;color:#000;}
+hr.heavy{height:5px;}
+hr.light{height:1px;}
+img{border:0;display:block;}
+img.right{margin:0 0 0 auto;}
+img.center{border:0;margin:0 auto;}
+table th,table td{padding:4px;}
+.center,header{text-align:center;}
+table.center {margin-left:auto; margin-right:auto;}
+.right{text-align:right;}
+.left{text-align:left;}
+.tableborder,.tableborder td,.tableborder th{border:1px solid #000;}
+.underline{text-decoration:underline;}
+</style>
+</head>
+<body>
+<header>
+<hgroup>
+<h1>txt2tags manual</h1>
+<h2>txt2tags-ports</h2>
+<h3>2026-10-21</h3>
+</hgroup>
+</header>
+<article>
+
+<p></p>
+<hr class="light">
+<p></p>
+<nav>
+
+  <ol>
+  <li><a href="#toc1">Getting started</a>
+    <ul>
+    <li><a href="#toc2">1.1. Run it</a>
+    </li>
+    <li><a href="#toc3">1.2. Your first document</a>
+    </li>
+    </ul>
+  </li>
+  <li><a href="#toc4">The three areas of a document</a>
+    <ul>
+    <li><a href="#toc5">2.1. Header area</a>
+    </li>
+    <li><a href="#toc6">2.2. Config area</a>
+    </li>
+    <li><a href="#toc7">2.3. Body area</a>
+    </li>
+    </ul>
+  </li>
+  <li><a href="#marks">Marks</a>
+    <ul>
+    <li><a href="#toc9">3.1. Titles</a>
+    </li>
+    <li><a href="#toc10">3.2. Inline marks</a>
+    </li>
+    <li><a href="#toc11">3.3. Paragraphs, line breaks, comments</a>
+    </li>
+    <li><a href="#toc12">3.4. Verbatim, raw and tagged text</a>
+    </li>
+    <li><a href="#toc13">3.5. Horizontal lines</a>
+    </li>
+    <li><a href="#toc14">3.6. Links and images</a>
+    </li>
+    <li><a href="#lists">3.7. Lists</a>
+    </li>
+    <li><a href="#toc16">3.8. Quotes</a>
+    </li>
+    <li><a href="#toc17">3.9. Tables</a>
+    </li>
+    </ul>
+  </li>
+  <li><a href="#toc18">Macros</a>
+  </li>
+  <li><a href="#settings">Settings</a>
+    <ul>
+    <li><a href="#toc20">5.1. Filters</a>
+    </li>
+    <li><a href="#toc21">5.2. Include</a>
+    </li>
+    </ul>
+  </li>
+  <li><a href="#toc22">Command line</a>
+    <ul>
+    <li><a href="#toc23">6.1. Where options come from</a>
+    </li>
+    </ul>
+  </li>
+  <li><a href="#toc24">Targets</a>
+  </li>
+  <li><a href="#toc25">The smaller ports</a>
+  </li>
+  </ol>
+
+</nav>
+<p></p>
+<hr class="light">
+<p></p>
+<p>
+txt2tags turns a plain-text document into HTML, LaTeX, Markdown, DocBook,
+man pages and 40 other formats. You write the text once, with a handful of
+simple marks, and convert it as many times as you need.
+</p>
+<p>
+This manual covers the language and the command line of the reference-like
+ports in this repository (Python <code>txt2tags3_mod</code>, Perl, and the single-file
+builds). The structure follows the official guide at
+<a href="https://txt2tags.org/userguide/">https://txt2tags.org/userguide/</a> ; the last chapter lists what the small Go,
+Rust, Lua and Tcl ports support.
+</p>
+
+<section id="toc1">
+<h1>1. Getting started</h1>
+
+<section id="toc2">
+<h2>1.1. Run it</h2>
+
+<p>
+Pick whichever form suits you; all of them take the same options.
+</p>
+
+<table class="tableborder">
+<tr>
+<th>Form</th>
+<th>Command</th>
+</tr>
+<tr>
+<td>Python single file</td>
+<td><code>python3 txt2tags.py -t html file.t2t</code></td>
+</tr>
+<tr>
+<td>Python package</td>
+<td><code>python3 -m txt2tags3_mod -t html file.t2t</code></td>
+</tr>
+<tr>
+<td>Perl single file</td>
+<td><code>perl txt2tags.pl -t html file.t2t</code></td>
+</tr>
+<tr>
+<td>Perl from sources</td>
+<td><code>perl -Ilib bin/txt2tags -t html file.t2t</code></td>
+</tr>
+</table>
+
+<p>
+The single files <code>txt2tags.py</code> and <code>txt2tags.pl</code> are attached to each
+GitHub release. They have no dependency besides Python 3 or Perl 5. Both are
+generated: <code>python3 txt2tags3_mod/bundle.py</code> writes
+<code>txt2tags3_mod/out/txt2tags.py</code> and <code>perl txt2tags_perl/bundle.pl</code> writes
+<code>txt2tags_perl/out/txt2tags.pl</code>.
+</p>
+<p>
+By default the output goes to the input name with the target extension
+(<code>file.t2t</code> gives <code>file.html</code>). Use <code>-o OUTFILE</code> to choose another name,
+or <code>-o -</code> to print on standard output. <code>-</code> as input reads standard input.
+</p>
+
+</section>
+<section id="toc3">
+<h2>1.2. Your first document</h2>
+
+<p>
+Save this as <code>first.t2t</code>:
+</p>
+
+<pre>
+  My first document
+  Your Name
+  2026-01-31
+  
+  = Introduction =
+  
+  This is a **bold** word, an //italic// one and a [link http://txt2tags.org].
+  
+  - first item
+  - second item
+</pre>
+
+<p>
+Then run <code>txt2tags -t html first.t2t</code> and open <code>first.html</code>.
+</p>
+
+</section>
+</section>
+<section id="toc4">
+<h1>2. The three areas of a document</h1>
+
+<p>
+A <code>.t2t</code> file has up to three areas, always in this order.
+</p>
+
+<section id="toc5">
+<h2>2.1. Header area</h2>
+
+<p>
+The first three lines: title, author, date. All are optional, but they keep
+their position, so leave a line empty to skip it. If the very first line is
+empty, the document has no header. The date line accepts a macro:
+</p>
+
+<pre>
+  My title
+  My name
+  %%date(%Y-%m-%d)
+</pre>
+
+<p>
+With <code>--skip-header-lines</code> the header is not reserved at all and the body
+starts on line 1 (useful for generated or snippet files).
+</p>
+
+</section>
+<section id="toc6">
+<h2>2.2. Config area</h2>
+
+<p>
+Lines starting with <code>%!</code> right after the header. They set options for this
+document only (see <a href="#settings">Settings</a>).
+</p>
+
+<pre>
+  %!target: html
+  %!encoding: UTF-8
+  %!options: --toc
+</pre>
+
+</section>
+<section id="toc7">
+<h2>2.3. Body area</h2>
+
+<p>
+Everything else. A line holding only <code>%%</code> ends the config area explicitly.
+</p>
+
+</section>
+</section>
+<section id="marks">
+<h1>3. Marks</h1>
+
+<section id="toc9">
+<h2>3.1. Titles</h2>
+
+<pre>
+  = Title level 1 =
+  == Title level 2 ==
+  ===== Title level 5 =====
+  + Numbered title +
+  ++ Numbered level 2 ++
+  = Title with a label =[mylabel]
+</pre>
+
+<p>
+The <code>=</code> signs on both sides must match, and a title can't be indented.
+Spaces around or inside the signs are ignored. Levels go from 1 to 5. A label
+goes right after the title, with no space, between brackets, and may contain
+letters, digits, <code>_</code> and <code>-</code>. Numbered titles (<code>+</code>) count on their own
+(1, 1.1...); <code>-n</code> or <code>--enum-title</code> numbers all titles. A flush-left title
+also closes an open list (see <a href="#lists">Lists</a>).
+</p>
+
+</section>
+<section id="toc10">
+<h2>3.2. Inline marks</h2>
+
+<table class="tableborder">
+<tr>
+<td>Result</td>
+<td>You write</td>
+</tr>
+<tr>
+<td>bold</td>
+<td><code>**bold**</code></td>
+</tr>
+<tr>
+<td>italic</td>
+<td><code>//italic//</code></td>
+</tr>
+<tr>
+<td>underline</td>
+<td><code>__underline__</code></td>
+</tr>
+<tr>
+<td>strike</td>
+<td><code>--strike--</code></td>
+</tr>
+<tr>
+<td>monospaced</td>
+<td><code>``mono``</code></td>
+</tr>
+</table>
+
+<p>
+Marks must hug their text: <code>** not bold **</code> is left alone, and a mark glued
+to a word on the outside (<code>2**3**4</code>) is not markup either. Marks can be
+combined (<code>**//bold italic//**</code>).
+</p>
+
+</section>
+<section id="toc11">
+<h2>3.3. Paragraphs, line breaks, comments</h2>
+
+<p>
+A paragraph is a block of lines ended by a blank line (a list or a table
+also ends it). Leading and trailing spaces are ignored. A line with <code>%</code> in
+column 1 is a comment and never reaches the output, even inside a paragraph;
+<code>%</code> anywhere else is plain text. A comment area is everything between two
+lines holding only <code>%%%</code>.
+</p>
+
+</section>
+<section id="toc12">
+<h2>3.4. Verbatim, raw and tagged text</h2>
+
+<p>
+Verbatim keeps text exactly as typed (escaped for the target). Raw sends text
+to the output untouched, and tagged text is like raw but marked as target
+code. Each has a one-line form and an area form:
+</p>
+
+<pre>
+  ``` one verbatim line
+  
+  ```
+  verbatim area
+  **not bold here**
+  ```
+  
+  """ one raw line
+  
+  """
+  raw area, sent as is
+  """
+  
+  ''' one tagged line
+  
+  '''
+  tagged area
+  '''
+</pre>
+
+</section>
+<section id="toc13">
+<h2>3.5. Horizontal lines</h2>
+
+<p>
+A line of at least 20 characters among <code>-</code>, <code>=</code> and <code>_</code> is a line. If it
+starts with <code>=</code> it is a strong line, otherwise a separator line. Leading and
+trailing spaces are allowed.
+</p>
+
+</section>
+<section id="toc14">
+<h2>3.6. Links and images</h2>
+
+<pre>
+  http://txt2tags.org                    bare URL, linked automatically
+  name@example.org                       email address
+  [label http://txt2tags.org]            named link
+  [label page.html]                      local file link
+  [photo.png]                            image
+  [[photo.png] http://txt2tags.org]      image used as a link
+</pre>
+
+<p>
+Recognised image extensions are png, jpg/jpeg, gif, eps, bmp and svg. No
+spaces are allowed inside the brackets of an image. A link label can itself be
+an image, and a label may not contain a <code>]</code> (use <code>%!postproc</code> for that).
+Addresses starting with <code>www.</code> or <code>ftp.</code> are linked too, the protocol being
+added for you.
+</p>
+
+</section>
+<section id="lists">
+<h2>3.7. Lists</h2>
+
+<pre>
+  - bullet item
+   - nested item (one more space)
+  + numbered item
+   + nested numbered item
+  : term
+   definition
+</pre>
+
+<p>
+There is exactly one space after the mark, and the indentation is free: a
+deeper indentation starts a sublist. A list ends after two consecutive blank
+lines, at the end of the file, or at an empty item (a line holding only the
+mark: <code>-</code>, <code>+</code> or <code>:</code>), which closes the current sublist. One blank
+line does not end a list: it lets an item contain several paragraphs, and
+keeps <code>- a</code> / blank / <code>- b</code> in a single list.
+</p>
+<p>
+In this fork, a flush-left title ends the list as well, even after a single
+blank line or none:
+</p>
+
+<pre>
+  - last item
+  
+  == Next section ==
+</pre>
+
+<p>
+Upstream txt2tags swallowed such a title into the last item. Run with
+<code>--legacy</code> to get that old behaviour back. A further option,
+<code>--blank-closes-list</code>, closes a list on a single blank line unless the next
+line is another item or is blank itself. Items with several paragraphs no
+longer work with it.
+</p>
+
+</section>
+<section id="toc16">
+<h2>3.8. Quotes</h2>
+
+<p>
+A line starting with a tab is a quote. More tabs nest it deeper.
+</p>
+
+</section>
+<section id="toc17">
+<h2>3.9. Tables</h2>
+
+<pre>
+  || Name | Qty |
+  | apples | 3 |
+  | pears | 12 |
+</pre>
+
+<p>
+<code>||</code> starts a header row, <code>|</code> a normal row. Keep a space around each pipe
+(spaces, not tabs). A trailing pipe at the end of the row draws a border, and
+spaces before the first pipe center the whole table. Extra pipes at the end of
+a cell span it across columns (<code>| wide cell ||</code>). Padding decides alignment:
+two or more spaces before a cell and none after right-aligns it, two or more
+on both sides centers it. Targets with table
+support (HTML, LaTeX, DocBook, the wikis...) render real tables; the others
+get plain-text ones.
+</p>
+
+</section>
+</section>
+<section id="toc18">
+<h1>4. Macros</h1>
+
+<table class="tableborder">
+<tr>
+<td>Macro</td>
+<td>Expands to</td>
+</tr>
+<tr>
+<td><code>%%date</code></td>
+<td>today's date, <code>%%date(%Y-%m-%d)</code> takes a strftime format</td>
+</tr>
+<tr>
+<td><code>%%mtime</code></td>
+<td>modification time of the source, same format argument</td>
+</tr>
+<tr>
+<td><code>%%infile</code></td>
+<td>input file name</td>
+</tr>
+<tr>
+<td><code>%%outfile</code></td>
+<td>output file name</td>
+</tr>
+<tr>
+<td><code>%%toc</code></td>
+<td>the table of contents, at this position</td>
+</tr>
+</table>
+
+<p>
+Macro names are case insensitive. A table of contents can also be requested with <code>--toc</code> (<code>--toc-level=N</code>
+sets the depth, <code>--toc-title=S</code> the title, <code>--toc-only</code> prints only it).
+</p>
+
+</section>
+<section id="settings">
+<h1>5. Settings</h1>
+
+<p>
+A config line is <code>%!KEY: value</code>. Spacing and capitalization of the key
+are ignored (<code>%!Target:html</code> and <code>%! TARGET :html</code> are the same).
+</p>
+
+<table class="tableborder">
+<tr>
+<td>Key</td>
+<td>Meaning</td>
+</tr>
+<tr>
+<td><code>%!target</code></td>
+<td>default target when <code>-t</code> isn't given</td>
+</tr>
+<tr>
+<td><code>%!options</code></td>
+<td>extra command-line options, as if typed</td>
+</tr>
+<tr>
+<td><code>%!encoding</code></td>
+<td>encoding of the source file</td>
+</tr>
+<tr>
+<td><code>%!style</code></td>
+<td>style sheet file (HTML CSS, LaTeX package)</td>
+</tr>
+<tr>
+<td><code>%!preproc</code></td>
+<td>rewrite the source before conversion</td>
+</tr>
+<tr>
+<td><code>%!postproc</code></td>
+<td>rewrite the output after conversion</td>
+</tr>
+<tr>
+<td><code>%!include</code></td>
+<td>insert another file at this point</td>
+</tr>
+<tr>
+<td><code>%!includeconf</code></td>
+<td>load only the config lines of another file</td>
+</tr>
+</table>
+
+<section id="toc20">
+<h2>5.1. Filters</h2>
+
+<p>
+<code>%!preproc</code> and <code>%!postproc</code> are "find and replace" rules, like sed.
+They take exactly two arguments: a regular expression and a replacement,
+quoted with <code>'...'</code> or <code>"..."</code> (or a single word with no spaces).
+</p>
+
+<pre>
+  %!preproc: 'TODO' 'DONE'
+  %!postproc: '(&lt;/?)B&gt;' '\1STRONG&gt;'
+</pre>
+
+<ul>
+<li>Preprocessing runs on each source line as it is read; postprocessing runs
+  on the converted document.
+</li>
+<li>Filters are cumulative and applied in the order defined; define as many as
+  needed.
+</li>
+<li><code>\n</code> and <code>\t</code> in the replacement are interpreted. To delete text,
+  replace it with an empty string.
+</li>
+<li>The pattern is a regular expression (Python syntax in <code>txt2tags3_mod</code>,
+  Perl syntax in the Perl port). Escape <code>\* \+ \. \^ \$ \? \( \) \{ \[ \| \\</code>
+  to match them literally.
+<p></p>
+Any setting except <code>%!target</code> can be restricted to a target with
+<code>%!key(target): value</code>. For filters, both the generic and the target ones
+are used:
+<p></p>
+<pre>
+  %!style(html): fancy.css
+  %!style(tex): amssymb
+  %!postproc(html): '&lt;body&gt;' '&lt;body class="manual"&gt;'
+  %!options(sgml): --toc
+</pre>
+
+<p></p>
+When a postproc filter rewrites tags, prefer the explicit target form.
+</li>
+</ul>
+
+</section>
+<section id="toc21">
+<h2>5.2. Include</h2>
+
+<pre>
+  %!include: chapter1.t2t
+  %!include(html): only-for-html.t2t
+  %!include: ``code.c``
+  %!include: ""data.html""
+  %!include: ''tags.txt''
+</pre>
+
+<p>
+Plain, backquoted, double-quoted and single-quoted file names include the file
+as txt2tags text, as verbatim, as raw and as tagged text respectively. For a
+txt2tags include, only the Body area of the file is used; its header and
+config areas are ignored, so the chapter can also be converted on its own.
+Use <code>--dump-source</code> to see the document with every include expanded.
+</p>
+<p>
+<code>%!includeconf: shared.t2t</code> (Config area only, no target form) loads the
+settings of another file, in the same format as the RC file.
+</p>
+
+</section>
+</section>
+<section id="toc22">
+<h1>6. Command line</h1>
+
+<p>
+<code>txt2tags [OPTIONS] file.t2t</code>
+</p>
+
+<table class="tableborder">
+<tr>
+<td>Option</td>
+<td>Effect</td>
+</tr>
+<tr>
+<td><code>-t TARGET</code></td>
+<td>output format (<code>--targets</code> lists them)</td>
+</tr>
+<tr>
+<td><code>-o FILE</code></td>
+<td>output file, <code>-</code> for standard output</td>
+</tr>
+<tr>
+<td><code>-i FILE</code></td>
+<td>input file, <code>-</code> for standard input</td>
+</tr>
+<tr>
+<td><code>-H</code></td>
+<td>no header/footer, just the converted body</td>
+</tr>
+<tr>
+<td><code>-T FILE</code></td>
+<td>use FILE as the output template</td>
+</tr>
+<tr>
+<td><code>--encoding=ENC</code></td>
+<td>source encoding</td>
+</tr>
+<tr>
+<td><code>--toc</code>, <code>--toc-level=N</code>, <code>--toc-title=S</code>, <code>--toc-only</code></td>
+<td>table of contents</td>
+</tr>
+<tr>
+<td><code>-n</code></td>
+<td>number all titles</td>
+</tr>
+<tr>
+<td><code>--style=FILE</code></td>
+<td>style sheet; <code>--css-sugar</code> and <code>--css-inside</code> for HTML</td>
+</tr>
+<tr>
+<td><code>--embed-images</code></td>
+<td>embed images as data in HTML, RTF, aat, aap</td>
+</tr>
+<tr>
+<td><code>--mask-email</code></td>
+<td>hide addresses from spam robots</td>
+</tr>
+<tr>
+<td><code>--width=N</code>, <code>--height=N</code>, <code>--chars=S</code></td>
+<td>ASCII-art and rst output</td>
+</tr>
+<tr>
+<td><code>--fix-path</code></td>
+<td>fix relative paths of images, links and CSS</td>
+</tr>
+<tr>
+<td><code>-C FILE</code></td>
+<td>read extra configuration from FILE</td>
+</tr>
+<tr>
+<td><code>--blank-closes-list</code></td>
+<td>see <a href="#lists">Lists</a></td>
+</tr>
+<tr>
+<td><code>--legacy</code></td>
+<td>titles are swallowed by an open list, like upstream</td>
+</tr>
+<tr>
+<td><code>--skip-header-lines</code></td>
+<td>no 3-line header, body starts on line 1</td>
+</tr>
+<tr>
+<td><code>--dump-config</code></td>
+<td>print all configuration found and exit</td>
+</tr>
+<tr>
+<td><code>--dump-source</code></td>
+<td>print the source with includes expanded</td>
+</tr>
+<tr>
+<td><code>-q</code> / <code>-v</code></td>
+<td>quiet / verbose</td>
+</tr>
+<tr>
+<td><code>-V</code> / <code>-h</code></td>
+<td>version / help</td>
+</tr>
+</table>
+
+<p>
+Any option turns off with a <code>no-</code> prefix (<code>--no-toc</code>).
+</p>
+
+<section id="toc23">
+<h2>6.1. Where options come from</h2>
+
+<p>
+From lowest to highest priority, each one overriding the previous:
+</p>
+
+<ol>
+<li>the user configuration file (RC file): <code>$HOME/.txt2tagsrc</code> on Unix, Linux
+  and Mac, <code>%HOMEPATH%\_t2trc</code> on Windows, or the file named by the
+  <code>T2TCONFIG</code> environment variable;
+</li>
+<li>the Config area of the document (<code>%!</code> lines, including <code>%!options</code>);
+</li>
+<li>the command line.
+<p></p>
+The RC file uses the same format as the Config area, for settings shared by
+all your documents (for example <code>%!options: --toc-level 4</code>). Any line of it
+that isn't blank, a comment or a valid config line is an error. <code>--no-rc</code>
+ignores it for one run.
+</li>
+</ol>
+
+</section>
+</section>
+<section id="toc24">
+<h1>7. Targets</h1>
+
+<p>
+Run <code>txt2tags --targets</code> for the exact list of your version.
+</p>
+
+<table class="tableborder">
+<tr>
+<th>Family</th>
+<th>Targets</th>
+</tr>
+<tr>
+<td>Web</td>
+<td>html, html5, xhtml, xhtmls, htmls, wp</td>
+</tr>
+<tr>
+<td>Wiki</td>
+<td>md, rst, adoc, bbcode, creole, doku, gmi, gwiki, moin, pmw, red, spip, tml, vimwiki, wiki, txt2t</td>
+</tr>
+<tr>
+<td>Office</td>
+<td>tex, texs, dbk, sgml, rtf, lout, mgp, mom, pm6, utmac, csv, csvs, ods, db</td>
+</tr>
+<tr>
+<td>Text</td>
+<td>txt, man, aat, aap, aas, aapp</td>
+</tr>
+</table>
+
+<p>
+The ASCII-art targets (aa*) draw boxes and tables with plain characters.
+The <code>*s</code> and <code>htmls</code> targets render spreadsheet-like output.
+</p>
+
+</section>
+<section id="toc25">
+<h1>8. The smaller ports</h1>
+
+<p>
+The Go, Rust, Lua and Tcl ports re-implement a subset of the language with
+their own small code base. They read the same <code>.t2t</code> files but only produce
+HTML and LaTeX (<code>-t html</code> or <code>-t tex</code>; Tcl does HTML only).
+</p>
+
+<table class="tableborder">
+<tr>
+<td>Feature</td>
+<td>Go</td>
+<td>Rust</td>
+<td>Lua</td>
+<td>Tcl</td>
+</tr>
+<tr>
+<td>Header, titles, paragraphs, lists, tables, inline marks</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Links, bare URLs</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Images, verbatim blocks</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Raw blocks, block comments</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Definition lists, table alignment</td>
+<td>yes</td>
+<td>yes</td>
+<td>definition lists only</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>%%date</code>, <code>%%toc</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>%!preproc</code> / <code>%!postproc</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+</tr>
+</table>
+
+<p>
+Go and Rust produce identical output. Their bare URLs follow the same rules as
+the reference: a URL stops at brackets, quotes and spaces, and drops trailing
+<code>.,;:!?</code>. They have no includes, quotes, numbered titles or other targets;
+use the Python or Perl versions for those.
+</p>
+<p>
+Binaries for Go and Rust are attached to the GitHub releases.
+</p>
+</section>
+
+<!-- html5 code generated by txt2tags 2.6. (http://txt2tags.org) -->
+<!-- cmdline: txt2tags -\-no-rc -t html5 -o docs/manual.html docs/manual.t2t -->
+</article></body></html>
