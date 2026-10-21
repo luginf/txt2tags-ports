@@ -63,11 +63,10 @@ Second paragraph after blank line.
 </itemizedlist>
 </para></listitem>
 <listitem><para>Third item
-<para></para>
-=== Ordered List ===
-<para></para>
 </para></listitem>
 </itemizedlist>
+    </sect3>
+    <sect3><title>Ordered List</title>
 <orderedlist numeration="arabic">
 <listitem><para>First step
 </para></listitem>
@@ -80,11 +79,10 @@ Second paragraph after blank line.
 </orderedlist>
 </para></listitem>
 <listitem><para>Third step
-<para></para>
-=== Definition List ===
-<para></para>
 </para></listitem>
 </orderedlist>
+    </sect3>
+    <sect3><title>Definition List</title>
 <variablelist>
 <varlistentry><term>Term One</term><listitem><para>
 Definition of term one.

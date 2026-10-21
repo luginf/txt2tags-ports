@@ -49,6 +49,9 @@ GetOptions(
     'template|T=s'      => \$cli_opts{template},
     'fix-path'          => \$cli_opts{'fix-path'},
     'embed-images'      => \$cli_opts{'embed-images'},
+    'blank-closes-list' => \$cli_opts{'blank-closes-list'},
+    'skip-header-lines' => \$cli_opts{'skip-header-lines'},
+    'legacy'            => \$cli_opts{legacy},
     'quiet|q'           => \$cli_opts{quiet},
     'verbose|v+'        => \$cli_opts{verbose},
     'debug'             => \$cli_opts{debug},
@@ -108,6 +111,9 @@ if ($rc_path && -f $rc_path) {
         'css-inside' => 'css-inside',
         'fix-path'   => 'fix-path',
         'embed-images'=> 'embed-images',
+        'blank-closes-list' => 'blank-closes-list',
+        'skip-header-lines' => 'skip-header-lines',
+        legacy       => 'legacy',
         quiet        => 'quiet',
         'dump-config'=> 'dump-config',
         'dump-source'=> 'dump-source',
@@ -205,6 +211,15 @@ Output control:
       --height N        Set slide height (for ASCII-art presentations)
       --fix-path        Fix relative paths in links and images
       --embed-images    Embed images as base64 inside the document
+      --blank-closes-list
+                        Close a list after one blank line, not two, unless
+                        the next line continues the same list
+      --skip-header-lines
+                        Don't reserve the first 3 lines for title/author/
+                        date: the document body starts on line 1
+
+      --legacy          Historical behaviour: a title right after a list
+                        (one blank line) is swallowed into the last item
 
 Debugging:
   -v, --verbose         Increase verbosity (-v, -vv, -vvv)

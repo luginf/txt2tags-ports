@@ -72,8 +72,7 @@ Second paragraph after blank line.
     	Deeply nested
 	Third item
 
-=== Ordered List ===
-
+<@Title3:>Ordered List
 
 <@Bullet:>
 	First step
@@ -83,8 +82,7 @@ Second paragraph after blank line.
   	Sub-step two
 	Third step
 
-=== Definition List ===
-
+<@Title3:>Definition List
 
 Term One
   Definition of term one.

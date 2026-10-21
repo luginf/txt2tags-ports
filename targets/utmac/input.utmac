@@ -62,9 +62,8 @@ Nested item B
 Deeply nested
 .PI 
 Third item
-
-=== Ordered List ===
-
+.
+.H4 Ordered List
 .PI 1
 First step
 .PI 2
@@ -75,9 +74,8 @@ Sub-step one
 Sub-step two
 .PI 3
 Third step
-
-=== Definition List ===
-
+.
+.H4 Definition List
 .PI Term One
 Definition of term one.
 .PI Term Two

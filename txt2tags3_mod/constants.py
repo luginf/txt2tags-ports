@@ -69,6 +69,9 @@ FLAGS = {
     "print": 0,
     "fix-path": 0,
     "embed-images": 0,
+    "blank-closes-list": 0,
+    "legacy": 0,
+    "skip-header-lines": 0,
 }
 OPTIONS = {
     "target": "",

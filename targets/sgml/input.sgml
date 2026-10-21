@@ -57,10 +57,9 @@ Second paragraph after blank line.
     </itemize>
   </itemize>
 <item>Third item
-
-=== Ordered List ===
-
 </itemize>
+
+<sect2>Ordered List<p>
 
 <enum>
 <item>First step
@@ -70,10 +69,9 @@ Second paragraph after blank line.
   <item>Sub-step two
   </enum>
 <item>Third step
-
-=== Definition List ===
-
 </enum>
+
+<sect2>Definition List<p>
 
 <descrip>
 <tag>Term One</tag>

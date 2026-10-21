@@ -49,8 +49,7 @@ Second paragraph after blank line.
 -*** Deeply nested
 -* Third item
 
-=== Ordered List ===
-
+<h5>Ordered List</h5>
 
 -#First step
 -#Second step
@@ -58,8 +57,7 @@ Second paragraph after blank line.
 -##Sub-step two
 -#Third step
 
-=== Definition List ===
-
+<h5>Definition List</h5>
 
 Term One
 Definition of term one.

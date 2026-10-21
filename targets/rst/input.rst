@@ -71,8 +71,9 @@ Unordered List
 
 - Third item
 
-=== Ordered List ===
 
+Ordered List
+------------
 
 
 1. First step
@@ -83,8 +84,9 @@ Unordered List
 
 3. Third step
 
-=== Definition List ===
 
+Definition List
+---------------
 
 
 Term One

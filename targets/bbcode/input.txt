@@ -50,10 +50,9 @@ Second paragraph after blank line.
 [/list]
 [/list]
 [*] Third item
-
-=== Ordered List ===
-
 [/list]
+
+[size=150]Ordered List[/size]
 
 [list=1]
 [*] First step
@@ -63,10 +62,9 @@ Second paragraph after blank line.
 [*] Sub-step two
 [/list]
 [*] Third step
-
-=== Definition List ===
-
 [/list]
+
+[size=150]Definition List[/size]
 
 Term One
 Definition of term one.

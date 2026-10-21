@@ -50,7 +50,6 @@ Second paragraph after blank line.
 
 === Ordered List ===
 
-
   - First step
   - Second step
     - Sub-step one
@@ -58,7 +57,6 @@ Second paragraph after blank line.
   - Third step
 
 === Definition List ===
-
 
 Term One
   Definition of term one.

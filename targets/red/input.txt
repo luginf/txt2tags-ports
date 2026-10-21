@@ -47,8 +47,7 @@ h3. Unordered List
 *** Deeply nested
 * Third item
 
-=== Ordered List ===
-
+h3. Ordered List
 
 # First step
 # Second step
@@ -56,8 +55,7 @@ h3. Unordered List
 ## Sub-step two
 # Third step
 
-=== Definition List ===
-
+h3. Definition List
 
 * Term One
 Definition of term one.

@@ -87,6 +87,33 @@ def Usage():
                     "embed image data inside HTML, html5, xhtml, RTF, aat and aap documents"
                 ),
             ),
+            fmt1
+            % (
+                "",
+                "--blank-closes-list",
+                _(
+                    "close a list after one blank line, not two, unless the next"
+                    " line continues the same list"
+                ),
+            ),
+            fmt1
+            % (
+                "",
+                "--skip-header-lines",
+                _(
+                    "don't reserve the first 3 lines for title/author/date:"
+                    " the document body starts on line 1 (CLI/RC only)"
+                ),
+            ),
+            fmt1
+            % (
+                "",
+                "--legacy",
+                _(
+                    "historical behaviour: a title right after a list (one"
+                    " blank line) is swallowed into the last list item"
+                ),
+            ),
             fmt2
             % ("-H", "--no-headers", _("suppress header and footer from the output")),
             fmt2

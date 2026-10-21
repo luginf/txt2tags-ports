@@ -136,7 +136,9 @@ Unordered List
 			Deeply nested
 	Third item
 
-=== Ordered List ===
+%page
+
+Ordered List
 
 
 	1. First step
@@ -145,7 +147,9 @@ Unordered List
 		2. Sub-step two
 	3. Third step
 
-=== Definition List ===
+%page
+
+Definition List
 
 
 	

@@ -58,10 +58,20 @@ def process_source_file(file_="", noconf=0, contents=[]):
     configuration returned by this function.
     The source files is read on this step only.
     """
+    # --skip-header-lines changes where the document's own Head/Conf/Body
+    # areas begin, so it must be known *before* we scan the document. It
+    # can therefore only come from the command line or the RC file: a
+    # %!options line living *inside* the document's Conf area can't be
+    # trusted to control where that very same Conf area starts. This does
+    # a lightweight, document-independent pre-parse (RC + command line
+    # only) just to fetch this one flag.
+    early_conf = ConfigMaster(state.RC_RAW + state.CMDLINE_RAW).parse()
+    no_header_lines = bool(early_conf.get("skip-header-lines"))
+
     if contents:
-        source = SourceDocument(contents=contents)
+        source = SourceDocument(contents=contents, no_header_lines=no_header_lines)
     else:
-        source = SourceDocument(file_)
+        source = SourceDocument(file_, no_header_lines=no_header_lines)
     head, conf, body = source.split()
     Message(_("Source document contents stored"), 2)
     if not noconf:
@@ -786,6 +796,75 @@ def convert(bodylines, config, firstlinenr=1):
                     ret.extend(state.BLOCK.blockout())
                 continue  # ignore consecutive blanks
 
+            # OPTION --blank-closes-list (default OFF): close an open list
+            # right away on a single blank line, instead of waiting for a
+            # second consecutive blank line. Without this option, the first
+            # blank line after a list is folded into the last item as a
+            # sub-paragraph (see 'parainsidelist'/'spacedlistitem' below),
+            # and only a second blank line actually closes the list; any
+            # ordinary paragraph or title right after a single-blank-closed
+            # list gets silently swallowed into the last list item instead.
+            #
+            # To limit the blast radius, we peek at the next source line
+            # first: if it starts another item of the very same list (or is
+            # itself blank, deferring to the existing two-blank-lines path),
+            # we fall through to the normal handling below, so plain
+            # blank-separated list items ('spacedlistitem': "- a\n\n- b")
+            # still stay inside one list, exactly as without the option.
+            # We only force the early close when the next line is NOT a
+            # list item, i.e. when the list looks genuinely over.
+            #
+            # KNOWN TRADE-OFF: a single blank line is also how a list item
+            # spans several paragraphs ('parainsidelist': "- a\n\n  more a").
+            # That continuation text is just as unmarked as an unrelated
+            # paragraph would be - there is no reliable one-line-lookahead
+            # way to tell the two apart. So with this option ON, a list
+            # item's extra paragraph(s) are no longer recognized as part of
+            # the item: the list is closed on the first blank line and the
+            # continuation text becomes a plain paragraph right after the
+            # (now closed) list instead. Documents that rely on
+            # multi-paragraph list items should not enable this option, or
+            # should rewrite those items without a blank line inside them.
+            #
+            # Independently of that option (and unless --legacy), a
+            # flush-left title on the next line also closes the list now,
+            # so no empty trailing paragraph is added to the last item.
+            if (
+                state.CONF.get("blank-closes-list") or not state.CONF.get("legacy")
+            ) and state.BLOCK.block().endswith("list"):
+                peek_continues_list = True  # assume continuation if unknown (EOF)
+                peek = ""
+                if lineref < len(bodylines):
+                    peek = bodylines[lineref]
+                    if (
+                        state.CONF.get("encoding")
+                        and state.CONF.get("encoding").lower() == "utf-8"
+                        and not isinstance(peek, str)
+                    ):
+                        peek = peek.decode("utf-8")
+                    peek = re.sub("[\n\r]+$", "", peek)
+                    peek_continues_list = bool(
+                        state.regex["blankline"].search(peek)
+                        or state.regex["list"].search(peek)
+                        or state.regex["numlist"].search(peek)
+                        or state.regex["deflist"].search(peek)
+                        or state.regex["listclose"].match(peek)
+                    )
+                peek_is_title = bool(
+                    not peek[:1].isspace()
+                    and (
+                        state.regex["title"].search(peek)
+                        or state.regex["numtitle"].search(peek)
+                    )
+                )
+                if (
+                    state.CONF.get("blank-closes-list") and not peek_continues_list
+                ) or (not state.CONF.get("legacy") and peek_is_title):
+                    while state.BLOCK.depth:  # closes list (and any nested ones)
+                        ret.extend(state.BLOCK.blockout())
+                    f_lastwasblank = 1
+                    continue
+
             # Paragraph (if any) is wanted inside lists also
             if state.BLOCK.block().endswith("list"):
                 state.BLOCK.holdaddsub("")
@@ -1074,9 +1153,15 @@ def convert(bodylines, config, firstlinenr=1):
 
         # ---------------------[ Title ]-----------------------------
 
+        # A flush-left title always ends an open list (it cannot belong to
+        # an item). --legacy restores the historical behaviour where the
+        # title is swallowed into the last list item.
+        title_blocked_by_list = state.BLOCK.block().endswith("list") and (
+            state.CONF.get("legacy") or line[:1].isspace()
+        )
         if (
             state.regex["title"].search(line) or state.regex["numtitle"].search(line)
-        ) and not state.BLOCK.block().endswith("list"):
+        ) and not title_blocked_by_list:
             if state.regex["title"].search(line):
                 name = "title"
             else:

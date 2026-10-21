@@ -58,14 +58,19 @@ class SourceDocument:
 
         Exception: If the first line is blank, this means no
         header info, so the Head Area is just the first line.
+
+        Exception 2: If no_header_lines is set (--skip-header-lines),
+        there is no Head Area at all (zero lines, not even one) and
+        the Conf/Body scan starts right on the document's first line.
     """
 
-    def __init__(self, filename="", contents=[]):
+    def __init__(self, filename="", contents=[], no_header_lines=False):
         self.areas = ["head", "conf", "body"]
         self.arearef = []
         self.areas_fancy = ""
         self.filename = filename
         self.buffer = []
+        self.no_header_lines = no_header_lines
         if filename:
             self.scan_file(filename)
         elif contents:
@@ -116,7 +121,10 @@ class SourceDocument:
         cfg_parser = ConfigLines().parse_line
         buf.insert(0, "")  # text start at pos 1
         ref = [1, 4, 0]
-        if not buf[1].strip():  # no header
+        if self.no_header_lines:  # --skip-header-lines: zero head lines,
+            ref[0] = 0  # not even the single line the blank-first-line
+            ref[1] = 1  # exception below still consumes
+        elif not buf[1].strip():  # no header (first line is blank)
             ref[0] = 0
             ref[1] = 2
         rgx = getRegexes()

@@ -116,11 +116,9 @@ Deeply nested
 .LIST OFF
 .ITEM
 Third item
-.PP
-=== Ordered List ===
-.PP
 .LIST OFF
 
+.SUBSUBHEAD "Ordered List"
 .LIST DIGIT
 .ITEM
 First step
@@ -134,10 +132,8 @@ Sub-step two
 .LIST OFF
 .ITEM
 Third step
-.PP
-=== Definition List ===
-.PP
 .LIST OFF
+.SUBSUBHEAD "Definition List"
 \# DEF LIST ON
 .PP
 .PARAHEAD "Term One: "

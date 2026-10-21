@@ -163,12 +163,24 @@ sub process_source_file {
     $noconf   //= 0;
     $contents //= [];
 
+    # --skip-header-lines changes where the document's own Head/Conf/Body
+    # areas begin, so it must be known *before* we scan the document. It
+    # can therefore only come from the command line or the RC file: a
+    # %!options line living *inside* the document's Conf area can't be
+    # trusted to control where that very same Conf area starts. This does
+    # a lightweight, document-independent pre-parse (RC + command line
+    # only) just to fetch this one flag.
+    my $early_conf = Text::Txt2tags::ConfigMaster->new([@RC_RAW, @CMDLINE_RAW])->parse;
+    my $no_header_lines = $early_conf->{'skip-header-lines'} ? 1 : 0;
+
     my $source;
     if (@$contents) {
-        $source = Text::Txt2tags::SourceDocument->new(contents => $contents);
+        $source = Text::Txt2tags::SourceDocument->new(
+            contents => $contents, no_header_lines => $no_header_lines);
     }
     else {
-        $source = Text::Txt2tags::SourceDocument->new(filename => $file);
+        $source = Text::Txt2tags::SourceDocument->new(
+            filename => $file, no_header_lines => $no_header_lines);
     }
 
     my ($head, $conf, $body) = $source->split_doc;
@@ -455,10 +467,66 @@ sub convert {
                     $f_lastwasblank = 1;
                 }
                 else {
-                    $list_pending_blank = 1;
-                    # Note: the blank is deferred; it will be pushed in the
-                    # continuation or item handler when !parainsidelist,
-                    # but discarded if the next blank closes the list.
+                    # OPTION --blank-closes-list (default OFF): close the
+                    # open list right away on this first blank line,
+                    # instead of waiting for a second consecutive blank.
+                    # Without this option, the blank is deferred (see the
+                    # 'else' branch below) and only a second blank line
+                    # actually closes the list; any ordinary paragraph or
+                    # title right after a single-blank-closed list would
+                    # otherwise be silently swallowed into the last item.
+                    #
+                    # To limit the blast radius, we peek at the next source
+                    # line first: if it starts another item of the very
+                    # same list (or is itself blank, deferring to the
+                    # normal two-blank-lines path above), we fall through
+                    # to the deferred handling below, so plain
+                    # blank-separated list items ('spacedlistitem':
+                    # "- a\n\n- b") still stay inside one list, exactly as
+                    # without the option. We only force the early close
+                    # when the next line is NOT a list item, i.e. when the
+                    # list looks genuinely over.
+                    #
+                    # KNOWN TRADE-OFF: a single blank line is also how a
+                    # list item spans several paragraphs ('parainsidelist':
+                    # "- a\n\n  more a"). That continuation text is just as
+                    # unmarked as an unrelated paragraph would be - there
+                    # is no reliable one-line-lookahead way to tell the two
+                    # apart. So with this option ON, a list item's extra
+                    # paragraph(s) are no longer recognized as part of the
+                    # item: the list is closed on the first blank line and
+                    # the continuation text becomes a plain paragraph right
+                    # after the (now closed) list instead. Documents that
+                    # rely on multi-paragraph list items should not enable
+                    # this option, or should rewrite those items without a
+                    # blank line inside them.
+                    my $close_now = 0;
+                    if ($CONF{'blank-closes-list'}) {
+                        my $peek_continues_list = 1;  # assume continuation on EOF
+                        if ($lineref < scalar @$bodylines) {
+                            my $peek = $bodylines->[$lineref];
+                            $peek //= '';
+                            $peek =~ s/[\r\n]+$//;
+                            $peek_continues_list = (
+                                   $peek =~ $regex{blankline}
+                                || $peek =~ $regex{list}
+                                || $peek =~ $regex{numlist}
+                                || $peek =~ $regex{deflist}
+                                || $peek =~ $regex{listclose}
+                            ) ? 1 : 0;
+                        }
+                        $close_now = !$peek_continues_list;
+                    }
+                    if ($close_now) {
+                        $_close_all_lists->();
+                        $f_lastwasblank = 1;
+                    }
+                    else {
+                        $list_pending_blank = 1;
+                        # Note: the blank is deferred; it will be pushed in the
+                        # continuation or item handler when !parainsidelist,
+                        # but discarded if the next blank closes the list.
+                    }
                 }
             }
             elsif ($quote_depth > 0) {
@@ -607,7 +675,12 @@ sub convert {
         # ---- Title -------------------------------------------------------
         my $is_title = 0;
         for my $kind (qw(title numtitle)) {
-            if (!@list_stack && $line =~ $regex{$kind}) {
+            # A flush-left title always ends an open list (it cannot belong
+            # to an item). --legacy restores the historical behaviour where
+            # the title is swallowed into the last list item.
+            my $title_ok = !@list_stack
+                || (!$CONF{legacy} && $line !~ /^\s/);
+            if ($title_ok && $line =~ $regex{$kind}) {
                 my $id    = $+{id};
                 my $txt   = $+{txt};
                 my $label = $+{label} // '';  # must capture before any regex ops reset $+

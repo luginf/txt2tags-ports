@@ -48,10 +48,9 @@ Second paragraph after blank line.
     -
   -
 - Third item
-
-=== Ordered List ===
-
 -
+
+       === Ordered List ===
 
 + First step
 + Second step
@@ -59,10 +58,9 @@ Second paragraph after blank line.
   + Sub-step two
   +
 + Third step
-
-=== Definition List ===
-
 +
+
+       === Definition List ===
 
 : Term One
   Definition of term one.

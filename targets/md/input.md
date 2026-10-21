@@ -46,8 +46,7 @@ Second paragraph after blank line.
    * Deeply nested
  * Third item
 
-=== Ordered List ===
-
+### Ordered List 
 
 1. First step
 1. Second step
@@ -55,8 +54,7 @@ Second paragraph after blank line.
 1. Sub-step two
 1. Third step
 
-=== Definition List ===
-
+### Definition List 
 
 : Term One
 Definition of term one.

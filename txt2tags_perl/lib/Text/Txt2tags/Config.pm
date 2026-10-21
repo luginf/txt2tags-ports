@@ -61,6 +61,7 @@ sub new {
         areas_fancy=> '',
         filename   => $args{filename} // '',
         buffer     => [],
+        no_header_lines => $args{no_header_lines} // 0,
     }, $class;
 
     if ($args{filename}) {
@@ -140,8 +141,14 @@ sub scan {
     unshift @buf, '';   # text starts at pos 1
 
     my @ref = (1, 4, 0);
+    if ($self->{no_header_lines}) {
+        # --skip-header-lines: zero head lines, not even the single line
+        # the auto-detect exceptions below still consume.
+        $ref[0] = 0;
+        $ref[1] = 1;
+    }
     # No header if: first line is blank OR starts with '%' (config/comment directive)
-    if (!$buf[1] || $buf[1] !~ /\S/ || $buf[1] =~ /^%/) {
+    elsif (!$buf[1] || $buf[1] !~ /\S/ || $buf[1] =~ /^%/) {
         $ref[0] = 0;
         $ref[1] = ($buf[1] && $buf[1] =~ /^%/) ? 1 : 2;  # conf at line 1 for %-lines
     }
